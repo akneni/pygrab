@@ -13,12 +13,36 @@ class ProxyList():
     
     @classmethod
     def get_random(cls):
+        
+        high_quality = []
+        
+        for ip in cls.PROXY_LIST:
+            if ip[4] == 'Transparent':
+                continue
+            elif int(ip[-1]) < 550:
+                continue
+            high_quality.append(ip)
+        
+        if high_quality != []:
+            x = _choice(high_quality)
+            print (x)
+            print (f'length: {len(cls.PROXY_LIST)}')
+            return x
         return _choice(cls.PROXY_LIST)
     
     @classmethod
     def update_proxies(cls):
         while (cls.PROXY_LIST != []): cls.PROXY_LIST.pop(0)
         cls.gen_proxies()
+    
+    @classmethod
+    async def grab_proxies_async(cls):
+        browser = await launch()
+        page = await browser.newPage()
+        await page.goto('https://proxyscrape.com/free-proxy-list', waitUntil='networkidle0')
+        html = await page.content()    
+        await browser.close()
+        return html
     
     @classmethod
     def gen_proxies(cls):
@@ -28,7 +52,7 @@ class ProxyList():
             row[4] = row[4].split('<')[0]
             return row
         try:
-            html = asyncio.get_event_loop().run_until_complete(__grab_proxies())
+            html = asyncio.get_event_loop().run_until_complete(cls.grab_proxies_async())
             html = html.split('</thead>')[1]
             html = html.split('<tr><td>')
             html.pop(0)
@@ -210,17 +234,3 @@ def __local_grab(dir: str, encoding='utf-8'):
 def __grab_thread_wrapper(url:str, payload:list, args, kwargs, use_proxy=False, retries=5):
     res = get(url, use_proxy=use_proxy, retries=retries, *args, **kwargs)
     payload.append(res)
-
-async def __grab_proxies():
-    browser = await launch()
-    page = await browser.newPage()
-    await page.goto('https://proxyscrape.com/free-proxy-list', waitUntil='networkidle0')
-    html = await page.content()
-    # print(html)
-    
-    # with open('thing.txt', 'w', encoding='utf-8') as f:
-    #     f.write(str(html))
-    
-    await browser.close()
-    
-    return html
