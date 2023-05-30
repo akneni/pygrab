@@ -1,7 +1,8 @@
 # Author: Anish Kanthamneni
 import requests as _requests
-from bs4 import BeautifulSoup as _BeautifulSoup
+from pyppeteer import launch
 from random import choice as _choice
+import asyncio
 
 class ProxyList():
     PROXY_LIST = []
@@ -17,25 +18,22 @@ class ProxyList():
     @classmethod
     def update_proxies(cls):
         while (cls.PROXY_LIST != []): cls.PROXY_LIST.pop(0)
-        cls.gen_proxies(cls.PROXY_LIST)
+        cls.gen_proxies()
     
     @classmethod
     def gen_proxies(cls):
+        def parse(row):
+            row = row.split('</td><td>')
+            row[-1] = row[4].split('>')[-1].replace('ms', '')
+            row[4] = row[4].split('<')[0]
+            return row
         try:
-            html = _requests.get('https://www.sslproxies.org/').text
-            # html = _requests.get('https://free-proxy-list.net/').text
-
-            # Parses it into the ideal format
-            soup = _BeautifulSoup(html, 'html.parser')
-            table = soup.find('table', {'class': 'table'})
-            rows = table.find_all('tr')
-            for row in rows[1:]:
-                cells = row.find_all('td')
-                ip_address = cells[0].text
-                port = cells[1].text
-                country = cells[3].text
-                https = cells[6].text
-                cls.PROXY_LIST.append([ip_address, port, country, https])
+            html = asyncio.get_event_loop().run_until_complete(__grab_proxies())
+            html = html.split('</thead>')[1]
+            html = html.split('<tr><td>')
+            html.pop(0)
+            cls.PROXY_LIST = [parse(i) for i in html]
+            
         except Exception as err:
             raise Exception(f'{err}\n\nThere seems to have been an error with finding a proxy IP. Please note that free proxies may not be reliable.')
 
@@ -213,3 +211,16 @@ def __grab_thread_wrapper(url:str, payload:list, args, kwargs, use_proxy=False, 
     res = get(url, use_proxy=use_proxy, retries=retries, *args, **kwargs)
     payload.append(res)
 
+async def __grab_proxies():
+    browser = await launch()
+    page = await browser.newPage()
+    await page.goto('https://proxyscrape.com/free-proxy-list', waitUntil='networkidle0')
+    html = await page.content()
+    # print(html)
+    
+    # with open('thing.txt', 'w', encoding='utf-8') as f:
+    #     f.write(str(html))
+    
+    await browser.close()
+    
+    return html
