@@ -106,7 +106,7 @@ def get(url: str, use_proxy=False, retries=5, encoding='utf-8', *args, **kwargs)
         return session.get(url, *args, **kwargs)
     raise Exception(f"Invalid url: {url}")
     
-def get_async(urls, use_proxy=False, retries=5, time_rest=0, *args, **kwargs) -> list:
+def get_async(urls, use_proxy=False, retries=5, encoding='utf-8', time_rest=0, *args, **kwargs) -> list:
     """
     Gets multiple URLs asynchronously.
 
@@ -128,7 +128,7 @@ def get_async(urls, use_proxy=False, retries=5, time_rest=0, *args, **kwargs) ->
     import threading as _threading
     import time
     if type(urls) == str:
-        return [get(urls, use_proxy=use_proxy, retries=retries, *args, **kwargs)]
+        return [get(urls, use_proxy=use_proxy, retries=retries, encoding=encoding, *args, **kwargs)]
 
     result = []
     threads = []
@@ -139,8 +139,8 @@ def get_async(urls, use_proxy=False, retries=5, time_rest=0, *args, **kwargs) ->
     
     for thread in threads:
         thread.join()
-    
-    return result    
+        
+    return result
 
 def head(url, **kwargs):
     return _requests.head(url, **kwargs)
@@ -190,7 +190,7 @@ def update_proxies():
     ProxyList.update_proxies()
 
 def __local_grab(dir: str, encoding='utf-8'):
-    acceptableRegFiles = ['.txt', '.py', '.js', '.c', '.html', '.css', '.xml', '.md', '.yaml', '.yml']
+    acceptableRegFiles = ['.txt', '.py', '.js', '.c', '.html', '.css', '.xml', '.md', '.yaml', '.yml', '.ipynb']
     acceptableImgFiles = ['.png', '.jpg']
     
     if any([dir.endswith(i) for i in acceptableRegFiles]):
