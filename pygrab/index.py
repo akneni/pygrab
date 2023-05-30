@@ -18,10 +18,11 @@ def gen_dict(ip, port=None):
         'https': f'{ip}:{port}'
     }
 
-# var = requests.get('https://google.com', proxies=gen_dict('158.160.56.149:8080')).text
+var = pygrab.get('https://google.com', proxies=gen_dict('103.168.53.105:41410')).text
+# var = pygrab.get('https://google.com', use_proxy=True).text
 
 
-# print (var[0:600])
+print (var[0:600])
 
 
 
@@ -39,5 +40,5 @@ async def main():
     
     return html
 
-var = asyncio.get_event_loop().run_until_complete(main())
-print (var)
+# var = asyncio.get_event_loop().run_until_complete(main())
+# print (var)
