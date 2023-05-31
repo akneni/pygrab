@@ -145,8 +145,16 @@ def get_async(urls, use_proxy=False, retries=5, encoding='utf-8', time_rest=0, *
 def head(url, **kwargs):
     return _requests.head(url, **kwargs)
 
-def post(url, data=None, json=None, **kwargs):
-    return _requests.post(url, data=data, json=json, **kwargs)
+def post(url:str, data=None, json=None, local_save_type:str=None, encoding:str='utf-8', **kwargs):
+    local_file_starts = ['./', 'C:', '/'] 
+    
+    if any([url.startswith(i) for i in local_file_starts]):
+        if local_save_type is None: local_save_type = 'w'
+        
+        with open(url, local_save_type, encoding=encoding) as f:
+            f.write(data)
+    else:
+        return _requests.post(url, data=data, json=json, **kwargs)
 
 def put(url, data=None, **kwargs):
     return _requests.put(url, data=data, **kwargs)
