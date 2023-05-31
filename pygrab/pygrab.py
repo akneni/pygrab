@@ -106,6 +106,9 @@ def get(url: str, use_proxy=False, retries=5, encoding='utf-8', enable_js=False,
     if any([url.startswith(i) for i in local_file_starts]):
         return __local_grab(url, encoding=encoding)
     elif any([url.startswith(i) for i in url_file_starts]):
+        if encoding != 'utf-8':
+            raise Exception("'encoding' argument is only relevent to grabbing local files.")
+        
         if enable_js:
             return __grab_enable_js(url)
         else:
@@ -131,7 +134,7 @@ def get(url: str, use_proxy=False, retries=5, encoding='utf-8', enable_js=False,
             return session.get(url, *args, **kwargs)
     raise Exception(f"Invalid url: {url}")
     
-def get_async(urls, use_proxy=False, retries=5, encoding='utf-8', time_rest=0, *args, **kwargs) -> list:
+def get_async(urls, use_proxy=False, retries=5, encoding='utf-8', enable_js=False, time_rest=0, *args, **kwargs) -> list:
     """
     Gets multiple URLs asynchronously.
 
@@ -153,12 +156,12 @@ def get_async(urls, use_proxy=False, retries=5, encoding='utf-8', time_rest=0, *
     import threading as _threading
     import time
     if type(urls) == str:
-        return [get(urls, use_proxy=use_proxy, retries=retries, encoding=encoding, *args, **kwargs)]
+        return [get(urls, use_proxy=use_proxy, retries=retries, encoding=encoding, enable_js=enable_js, *args, **kwargs)]
 
     result = []
     threads = []
     for url in urls:
-        threads.append(_threading.Thread(target=__grab_thread_wrapper, args=[url, result, args, kwargs, use_proxy, retries]))
+        threads.append(_threading.Thread(target=__grab_thread_wrapper, args=[url, result, args, kwargs, use_proxy, retries, enable_js]))
         threads[-1].start()
         time.sleep(time_rest)
     
@@ -179,6 +182,9 @@ def post(url:str, data=None, json=None, local_save_type:str=None, encoding:str='
         with open(url, local_save_type, encoding=encoding) as f:
             f.write(data)
     else:
+        if (local_save_type is not None or encoding != 'utf-8'):
+            raise Exception("Arguments 'local_save_type' and 'encoding' are only relevent for posting to local files.")
+        
         return _requests.post(url, data=data, json=json, **kwargs)
 
 def put(url, data=None, **kwargs):
@@ -242,8 +248,8 @@ def __local_grab(dir: str, encoding='utf-8'):
 
     raise Exception(f"File type not supported: {dir}")
 
-def __grab_thread_wrapper(url:str, payload:list, args, kwargs, use_proxy=False, retries=5):
-    res = get(url, use_proxy=use_proxy, retries=retries, *args, **kwargs)
+def __grab_thread_wrapper(url:str, payload:list, args, kwargs, use_proxy=False, retries=5, enable_js=False):
+    res = get(url, use_proxy=use_proxy, retries=retries, enable_js=enable_js, *args, **kwargs)
     payload.append(res)
 
 def __grab_enable_js(url):
