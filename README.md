@@ -2,8 +2,7 @@ Pygrab is a library that can make secure http and https requests. This library b
 
 Features
 - Supports asynchronous requests.
-- Scrape free proxy sites to get a list of proxy IP addresses.
-- Get random IP addresses based on your preferred location.
-- Supports both SSL and non-SSL proxies.
-- Option to refresh the list of IPs.
+- Supports javascript enables requests.
+- Supports local file get and post requests.
+- Automated proxy handling.
 - Simple and easy-to-use interface.
