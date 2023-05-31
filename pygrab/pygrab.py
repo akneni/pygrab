@@ -86,7 +86,7 @@ class ProxyList():
 
 
 
-def get(url: str, use_proxy=False, retries=5, encoding='utf-8', *args, **kwargs): 
+def get(url: str, use_proxy=False, retries=5, encoding='utf-8', enable_js=False, *args, **kwargs): 
     """
     Gets the content at the specified URL.
 
@@ -106,26 +106,29 @@ def get(url: str, use_proxy=False, retries=5, encoding='utf-8', *args, **kwargs)
     if any([url.startswith(i) for i in local_file_starts]):
         return __local_grab(url, encoding=encoding)
     elif any([url.startswith(i) for i in url_file_starts]):
-        session = _requests.Session()
-        retry = _requests.packages.urllib3.util.retry.Retry(total=retries, backoff_factor=0.1, status_forcelist=[500, 502, 503, 504])
-        adapter = _requests.adapters.HTTPAdapter(max_retries=retry)
-        session.mount('http://', adapter)
-        session.mount('https://', adapter)
-        
-        if use_proxy:
-            if ProxyList.is_empty():
-                ProxyList.gen_proxies()
-            temp_prox = ProxyList.get_random()
-            proxies = {
-                'http': f'http://{temp_prox[0]}:{temp_prox[1]}',
-                'https': f'https://{temp_prox[0]}:{temp_prox[1]}'
-            }
-            try:
-                return session.get(url, *args, **kwargs, proxies=proxies)
-            except Exception as err:
-                raise Exception(f'{err}\n\nThere seems to have been an error with the proxy IP. Please note that free proxies may not be reliable.')
+        if enable_js:
+            return __grab_enable_js(url)
+        else:
+            session = _requests.Session()
+            retry = _requests.packages.urllib3.util.retry.Retry(total=retries, backoff_factor=0.1, status_forcelist=[500, 502, 503, 504])
+            adapter = _requests.adapters.HTTPAdapter(max_retries=retry)
+            session.mount('http://', adapter)
+            session.mount('https://', adapter)
+            
+            if use_proxy:
+                if ProxyList.is_empty():
+                    ProxyList.gen_proxies()
+                temp_prox = ProxyList.get_random()
+                proxies = {
+                    'http': f'http://{temp_prox[0]}:{temp_prox[1]}',
+                    'https': f'https://{temp_prox[0]}:{temp_prox[1]}'
+                }
+                try:
+                    return session.get(url, *args, **kwargs, proxies=proxies)
+                except Exception as err:
+                    raise Exception(f'{err}\n\nThere seems to have been an error with the proxy IP. Please note that free proxies may not be reliable.')
 
-        return session.get(url, *args, **kwargs)
+            return session.get(url, *args, **kwargs)
     raise Exception(f"Invalid url: {url}")
     
 def get_async(urls, use_proxy=False, retries=5, encoding='utf-8', time_rest=0, *args, **kwargs) -> list:
@@ -242,3 +245,14 @@ def __local_grab(dir: str, encoding='utf-8'):
 def __grab_thread_wrapper(url:str, payload:list, args, kwargs, use_proxy=False, retries=5):
     res = get(url, use_proxy=use_proxy, retries=retries, *args, **kwargs)
     payload.append(res)
+
+def __grab_enable_js(url):
+    return _asyncio.get_event_loop().run_until_complete(__grab_enable_js_async(url)) 
+
+async def __grab_enable_js_async(url):
+    browser = await _launch()
+    page = await browser.newPage()
+    await page.goto(url, waitUntil='networkidle0')
+    html = await page.content()    
+    await browser.close()
+    return html
