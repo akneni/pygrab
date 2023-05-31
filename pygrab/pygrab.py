@@ -1,8 +1,8 @@
 # Author: Anish Kanthamneni
 import requests as _requests
-from pyppeteer import launch
+from pyppeteer import launch as _launch
 from random import choice as _choice
-import asyncio
+import asyncio as _asyncio
 
 class ProxyList():
     PROXY_LIST = []
@@ -37,7 +37,7 @@ class ProxyList():
     
     @classmethod
     async def grab_proxies_async(cls):
-        browser = await launch()
+        browser = await _launch()
         page = await browser.newPage()
         await page.goto('https://proxyscrape.com/free-proxy-list', waitUntil='networkidle0')
         html = await page.content()    
@@ -52,14 +52,14 @@ class ProxyList():
             row[4] = row[4].split('<')[0]
             return row
         try:
-            html = asyncio.get_event_loop().run_until_complete(cls.grab_proxies_async())
-            html = html.split('</thead>')[1]
+            raw_html = _asyncio.get_event_loop().run_until_complete(cls.grab_proxies_async())
+            html = raw_html.split('</thead>')[1]
             html = html.split('<tr><td>')
             html.pop(0)
             cls.PROXY_LIST = [parse(i) for i in html]
             
         except Exception as err:
-            raise Exception(f'{err}\n\nThere seems to have been an error with finding a proxy IP. Please note that free proxies may not be reliable.')
+            raise Exception(f'{err}\n\n{raw_html}\n\nThere seems to have been an error with finding a proxy IP. Please note that free proxies may not be reliable.')
 
     @classmethod
     def set_proxies(cls, lst):
