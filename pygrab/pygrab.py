@@ -154,7 +154,7 @@ def get_async(urls, use_proxy=False, retries=5, encoding='utf-8', enable_js=Fals
     """
     # only import if async functionality is needed
     import threading as _threading
-    import time
+    import time as _time
     if type(urls) == str:
         return [get(urls, use_proxy=use_proxy, retries=retries, encoding=encoding, enable_js=enable_js, *args, **kwargs)]
 
@@ -163,12 +163,58 @@ def get_async(urls, use_proxy=False, retries=5, encoding='utf-8', enable_js=Fals
     for url in urls:
         threads.append(_threading.Thread(target=__grab_thread_wrapper, args=[url, result, args, kwargs, use_proxy, retries, enable_js]))
         threads[-1].start()
-        time.sleep(time_rest)
+        _time.sleep(time_rest)
     
     for thread in threads:
         thread.join()
         
     return result
+
+def download(url: str, name:str=None, use_proxy=False, retries=5) -> None:
+    if '.' not in url:
+        raise Exception("Argument 'url' needs a filepath extention")
+    
+
+    if name is not None:
+        if '.' not in name:
+            if '.' in url:
+                name += '.' + url.split('.')[-1]
+        elif name.split('.')[-1] != url.split('.')[-1]:
+            raise Exception ("File extentions for 'url' and 'name' must match.")
+    elif '/' in url:
+        name = url.split('/')[-1]
+    else:
+        name=url
+        
+
+    response = get(url, use_proxy=use_proxy, retries=retries)
+
+    if response.status_code == 200:
+        with open(name, 'wb') as f:
+            f.write(response.content)
+    else:
+        raise Exception(f"Error fetching url. Status code - {response.status_code}")
+
+def download_async(urls:list, names:list=None, use_proxy=False, retries=5, time_rest=0) -> None:
+    if names is not None:
+        if len(urls) != len(names):
+            raise Exception("Lists 'url' and 'name' must be of equal length.")
+    else:
+        names = [None for _ in range(len(urls))]
+
+    # only import if async functionality is needed
+    import threading as _threading
+    import time as _time
+
+    threads = []
+    for url, name in zip(urls, names):
+        threads.append(_threading.Thread(target=download, args=[url, name, use_proxy, retries]))
+        threads[-1].start()
+        _time.sleep(time_rest)
+    
+    for thread in threads:
+        thread.join()
+    
 
 def head(url, **kwargs):
     return _requests.head(url, **kwargs)
