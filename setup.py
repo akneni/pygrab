@@ -2,7 +2,7 @@ from setuptools import setup
 
 setup(
     name='pygrab',
-    version='0.1.0',
+    version='0.1.1',
     description='A secure python library for fetching data with async support',
     author='Anish Kanthamneni',
     author_email='akneni@gmail.com',
