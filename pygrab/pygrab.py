@@ -86,7 +86,7 @@ class ProxyList():
 
 
 
-def get(url: str, use_proxy=False, retries=5, encoding='utf-8', enable_js=False, *args, **kwargs): 
+def get(url: str, use_proxy=False, retries=5, enable_js=False, *args, **kwargs) -> str: 
     """
     Gets the content at the specified URL.
 
@@ -104,11 +104,8 @@ def get(url: str, use_proxy=False, retries=5, encoding='utf-8', enable_js=False,
     local_file_starts = ['./', 'C:', '/'] 
     url_file_starts = ['http', 'ftp:', 'mailto:']
     if any([url.startswith(i) for i in local_file_starts]):
-        return __local_grab(url, encoding=encoding)
-    elif any([url.startswith(i) for i in url_file_starts]):
-        if encoding != 'utf-8':
-            raise Exception("'encoding' argument is only relevent to grabbing local files.")
-        
+        raise ValueError ("Url must start with http. use get_local() for local requests.")
+    elif any([url.startswith(i) for i in url_file_starts]):        
         if enable_js:
             return __grab_enable_js(url)
         else:
@@ -131,10 +128,10 @@ def get(url: str, use_proxy=False, retries=5, encoding='utf-8', enable_js=False,
                 except Exception as err:
                     raise Exception(f'{err}\n\nThere seems to have been an error with the proxy IP. Please note that free proxies may not be reliable.')
 
-            return session.get(url, *args, **kwargs)
+            return str(session.get(url, *args, **kwargs).text)
     raise Exception(f"Invalid url: {url}")
     
-def get_async(urls, use_proxy=False, retries=5, encoding='utf-8', enable_js=False, time_rest=0, *args, **kwargs) -> list:
+def get_async(urls, use_proxy=False, retries=5, enable_js=False, time_rest=0, *args, **kwargs) -> list:
     """
     Gets multiple URLs asynchronously.
 
@@ -156,7 +153,7 @@ def get_async(urls, use_proxy=False, retries=5, encoding='utf-8', enable_js=Fals
     import threading as _threading
     import time as _time
     if type(urls) == str:
-        return [get(urls, use_proxy=use_proxy, retries=retries, encoding=encoding, enable_js=enable_js, *args, **kwargs)]
+        return [get(urls, use_proxy=use_proxy, retries=retries, enable_js=enable_js, *args, **kwargs)]
 
     result = []
     threads = []
@@ -169,6 +166,11 @@ def get_async(urls, use_proxy=False, retries=5, encoding='utf-8', enable_js=Fals
         thread.join()
         
     return result
+
+def get_local(filename:str, local_read_type:str='r', encoding:str='utf-8'):
+    with open(filename, local_read_type, encoding=encoding) as f:
+        data = f.read()
+    return data
 
 def download(url: str, name:str=None, use_proxy=False, retries=5) -> None:
     if '.' not in url:
@@ -219,19 +221,16 @@ def download_async(urls:list, names:list=None, use_proxy=False, retries=5, time_
 def head(url, **kwargs):
     return _requests.head(url, **kwargs)
 
-def post(url:str, data=None, json=None, local_save_type:str=None, encoding:str='utf-8', **kwargs):
+def post(url:str, data=None, json=None, **kwargs):
     local_file_starts = ['./', 'C:', '/'] 
-    
     if any([url.startswith(i) for i in local_file_starts]):
-        if local_save_type is None: local_save_type = 'w'
+        raise ValueError("use post_local() for creation of local files.")
         
-        with open(url, local_save_type, encoding=encoding) as f:
-            f.write(data)
-    else:
-        if (local_save_type is not None or encoding != 'utf-8'):
-            raise Exception("Arguments 'local_save_type' and 'encoding' are only relevent for posting to local files.")
-        
-        return _requests.post(url, data=data, json=json, **kwargs)
+    return _requests.post(url, data=data, json=json, **kwargs)
+
+def post_local(filepath:str, data:str, local_save_type:str="w", encoding:str='utf-8') -> None:
+    with open(filepath, local_save_type, encoding=encoding) as f:
+        f.write(str(data))
 
 def put(url, data=None, **kwargs):
     return _requests.put(url, data=data, **kwargs)
@@ -273,26 +272,6 @@ def update_proxies():
         None
     """
     ProxyList.update_proxies()
-
-def __local_grab(dir: str, encoding='utf-8'):
-    acceptableRegFiles = ['.txt', '.py', '.js', '.c', '.html', '.css', '.xml', '.md', '.yaml', '.yml', '.ipynb']
-    acceptableImgFiles = ['.png', '.jpg']
-    
-    if any([dir.endswith(i) for i in acceptableRegFiles]):
-        with open(dir, 'r', encoding=encoding) as f:
-            data = f.read()
-        return data
-    elif dir.endswith('.csv'):
-        with open(dir, 'r', encoding=encoding) as f:
-            data = f.read().strip().split("\n")
-        data = [i.split(",") for i in data ]
-        return data
-    if any([dir.endswith(i) for i in acceptableImgFiles]):
-        with open(dir, 'rb') as f:
-            data = f.read()
-        return data
-
-    raise Exception(f"File type not supported: {dir}")
 
 def __grab_thread_wrapper(url:str, payload:list, args, kwargs, use_proxy=False, retries=5, enable_js=False):
     res = get(url, use_proxy=use_proxy, retries=retries, enable_js=enable_js, *args, **kwargs)
