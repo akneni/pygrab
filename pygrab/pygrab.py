@@ -24,16 +24,28 @@ def get(url: str, use_proxy=False, retries=5, enable_js=False, *args, **kwargs):
     Gets the content at the specified URL.
 
     Parameters:
-    url (str): The URL to get.
-    use_proxy (bool, optional): Whether to use a proxy. Defaults to False.
-    retries (int, optional): The number of times to retry the request if it fails. Defaults to 5.
-    encoding (str, optional): The encoding to use when reading the response. Defaults to 'utf-8'.
-    *args: Variable length argument list passed to requests.get.
-    **kwargs: Arbitrary keyword arguments passed to requests.get.
+        url (str): The URL to get.
+        use_proxy (bool, optional): Whether to use a proxy. Defaults to False.
+        retries (int, optional): The number of times to retry the request if it fails. Defaults to 5.
+        encoding (str, optional): The encoding to use when reading the response. Defaults to 'utf-8'.
+        *args: Variable length argument list passed to requests.get.
+        **kwargs: Arbitrary keyword arguments passed to requests.get.
 
     Returns:
-    requests.Response: The response from the server.
+        requests.Response: The response from the server.
+
+    Raises:
+        TypeError: If any of the arguments are not of the desired data type.
     """
+    if not (isinstance(url, str)):
+        raise TypeError("Argument 'url' must be a str")
+    elif not (isinstance(use_proxy, bool)):
+        raise TypeError("Argument 'use_proxy' must be a bool")
+    elif not (isinstance(retries, int)):
+        raise TypeError("Argument 'retries' must be a int")
+    elif not (isinstance(enable_js, bool)):
+        raise TypeError("Argument 'enable_js' must be a bool")
+
     local_file_starts = ['./', 'C:', '/'] 
     url_file_starts = ['http', 'ftp:', 'mailto:']
     if any([url.startswith(i) for i in local_file_starts]):
@@ -94,9 +106,22 @@ def get_async(urls, use_proxy=False, retries=5, enable_js=False, time_rest=0, *a
 
     Returns:
         list: A list of responses from the grabbed URLs.
+    
+    Raises:
+        TypeError: If any of the arguments are not of the desired data type.
     """
-    # only import if async functionality is needed
-    import threading as _threading
+    if not (isinstance(urls, list)):
+        raise TypeError("Argument 'urls' must be a list")
+    elif not (isinstance(use_proxy, bool)):
+        raise TypeError("Argument 'use_proxy' must be a bool")
+    elif not (isinstance(retries, int)):
+        raise TypeError("Argument 'retries' must be a int")
+    elif not (isinstance(enable_js, bool)):
+        raise TypeError("Argument 'enable_js' must be a bool")
+    elif not (isinstance(time_rest, int) or isinstance(time_rest, float)):
+        raise TypeError("Argument 'time_rest' must be a int or float")
+
+    import threading as _threading # only import if async functionality is needed
     if type(urls) == str:
         return [get(urls, use_proxy=use_proxy, retries=retries, enable_js=enable_js, *args, **kwargs)]
 
@@ -113,6 +138,31 @@ def get_async(urls, use_proxy=False, retries=5, enable_js=False, time_rest=0, *a
     return result
 
 def get_local(filename:str, local_read_type:str='r', encoding:str='utf-8'):
+    """
+    Reads the contens of a file and returns it to the user.
+
+    This function reads the contens of a file and returns it to the user.
+
+    Parameters:
+        filename (str): The file to read from.
+        local_read_type (str, optional): The read type, 'r' or 'rb' for example.
+        encoding (str, optional): Encoding, 'utf-8 or 'ascii' for example.
+
+    Returns:
+        data: The contents of the file
+
+    Raises:
+        TypeError: If any of the arguments are not of the desired data type.
+    """
+        
+    if not (isinstance(filename, str)):
+        raise TypeError("Argument 'filename' must be a str")
+    if not (isinstance(local_read_type, str)):
+        raise TypeError("Argument 'local_read_type' must be a str")
+    if not (isinstance(encoding, str)):
+        raise TypeError("Argument 'encoding' must be a str")
+
+
     with open(filename, local_read_type, encoding=encoding) as f:
         data = f.read()
     return data
@@ -124,18 +174,28 @@ def download(url: str, local_filename:str=None, use_proxy=False, retries=5) -> N
     This function retrieves a file from a specified URL and saves it to a local directory. The file will be saved with the filename from the URL if no local filename is specified.
 
     Parameters:
-    url (str): The URL of the file to be downloaded. Must include a file extension.
-    local_filename (str, optional): The name to be used when saving the file locally. If none is provided, the function uses the filename from the URL. Must include a file extension if provided.
-    use_proxy (bool, optional): If set to True, the function will use a proxy server for the download. Defaults to False.
-    retries (int, optional): The number of retry attempts for the download in case of failure. Defaults to 5.
+        url (str): The URL of the file to be downloaded. Must include a file extension.
+        local_filename (str, optional): The name to be used when saving the file locally. If none is provided, the function uses the filename from the URL. Must include a file extension if provided.
+        use_proxy (bool, optional): If set to True, the function will use a proxy server for the download. Defaults to False.
+        retries (int, optional): The number of retry attempts for the download in case of failure. Defaults to 5.
 
     Returns:
-    None
+        None
 
     Raises:
-    ValueError: If 'url' does not contain a file extension or if there was an error fetching the URL.
-    ValueError: If 'local_filename' is specified but does not contain a file extension.
+        TypeError: If any of the arguments are not of the desired data type.
+        ValueError: If 'url' does not contain a file extension or if there was an error fetching the URL.
+        ValueError: If 'local_filename' is specified but does not contain a file extension.
     """
+    if not (isinstance(url, str)):
+        raise TypeError("Argument 'url' must be a str")
+    elif not (isinstance(local_filename, str) or local_filename is None):
+        raise TypeError("Argument 'local_filename' must be a str")
+    elif not (isinstance(use_proxy, bool)):
+        raise TypeError("Argument 'use_proxy' must be a bool")
+    elif not (isinstance(retries, int)):
+        raise TypeError("Argument 'retries' must be a int")
+    
     if '.' not in url:
         raise ValueError("Argument 'url' needs a filepath extention")
     
@@ -164,30 +224,30 @@ def download_async(urls:list, local_filename:list=None, use_proxy=False, retries
     This function uses threading to download multiple files simultaneously. Each file is saved with a filename from the list of local filenames, if provided. If no local filename is provided, the function uses the filename from the corresponding URL.
 
     Parameters:
-    urls (list of str): The URLs of the files to be downloaded. Each URL must include a file extension.
-    local_filename (list of str, optional): A list of names to be used when saving the files locally. If none is provided, the function uses the filename from each corresponding URL. Each filename must include a file extension if provided. Must be of same length as 'urls' if provided.
-    use_proxy (bool, optional): If set to True, the function will use a proxy server for the downloads. Defaults to False.
-    retries (int, optional): The number of retry attempts for the downloads in case of failure. Defaults to 5.
-    time_rest (int, optional): The amount of time to rest between the start of each download thread. Defaults to 0 seconds.
+        urls (list of str): The URLs of the files to be downloaded. Each URL must include a file extension.
+        local_filename (list of str, optional): A list of names to be used when saving the files locally. If none is provided, the function uses the filename from each corresponding URL. Each filename must include a file extension if provided. Must be of same length as 'urls' if provided.
+        use_proxy (bool, optional): If set to True, the function will use a proxy server for the downloads. Defaults to False.
+        retries (int, optional): The number of retry attempts for the downloads in case of failure. Defaults to 5.
+        time_rest (int, optional): The amount of time to rest between the start of each download thread. Defaults to 0 seconds.
 
     Returns:
-    None
+        None
 
     Raises:
-    TypeError: If any of the arguments are not of the desired data type.
-    ValueError: If 'local_filename' is specified but does not match the length of 'urls' or if a URL does not contain a file extension.
-    ValueError: If a 'local_filename' is specified but does not contain a file extension.
+        TypeError: If any of the arguments are not of the desired data type.
+        ValueError: If 'local_filename' is specified but does not match the length of 'urls' or if a URL does not contain a file extension.
+        ValueError: If a 'local_filename' is specified but does not contain a file extension.
     """
-    if (not isinstance(urls, list)):
+    if not (isinstance(urls, list)):
         raise TypeError("Argument 'urls' must be a list")
-    elif (not isinstance(local_filename, list)):
+    elif not (isinstance(local_filename, list) or local_filename is None):
         raise TypeError("Argument 'local_filename' must be a list")
-    elif (not isinstance(use_proxy, bool)):
+    elif not (isinstance(use_proxy, bool)):
         raise TypeError("Argument 'use_proxy' must be a bool")
-    elif (not isinstance(retries, int)):
+    elif not (isinstance(retries, int)):
         raise TypeError("Argument 'retries' must be a int")
-    elif (not (isinstance(time_rest, int) or isinstance(time_rest, float))):
-        raise TypeError("Argument 'retries' must be a int or float")
+    elif not (isinstance(time_rest, int) or isinstance(time_rest, float)):
+        raise TypeError("Argument 'time_rest' must be a int or float")
 
 
     if local_filename is not None:
@@ -227,13 +287,13 @@ def post_local(filepath:str, data:str, local_save_type:str="w", encoding:str='ut
     This function is used to write or append data to a local file. It can be used in various scenarios such as saving request data, logging, or other local storage needs.
 
     Parameters:
-    filepath (str): The path to the file where the data will be written. If the file does not exist, it will be created.
-    data (str): The data that will be written to the file.
-    local_save_type (str, optional): The mode in which the file is opened. Defaults to 'w' (write mode), and can also be set to 'a' (append mode) or any other valid file mode.
-    encoding (str, optional): The encoding to be used when opening the file. Defaults to 'utf-8'.
+        filepath (str): The path to the file where the data will be written. If the file does not exist, it will be created.
+        data (str): The data that will be written to the file.
+        local_save_type (str, optional): The mode in which the file is opened. Defaults to 'w' (write mode), and can also be set to 'a' (append mode) or any other valid file mode.
+        encoding (str, optional): The encoding to be used when opening the file. Defaults to 'utf-8'.
 
     Returns:
-    None
+        None
     """
     with open(filepath, local_save_type, encoding=encoding) as f:
         f.write(str(data))
