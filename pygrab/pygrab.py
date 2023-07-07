@@ -1,88 +1,21 @@
-# Author: Anish Kanthamneni
+"""
+This module implements the primary developer interface for pygrab.
+
+The main responsibilities of the :class:pygrab <pygrab> class revolve 
+predominantly around the developer's perspective. pygrab delegates the 
+majority of its heavy-duty tasks to smaller, specialized auxiliary 
+modules and functions, ensuring an intuitive and seamless experience 
+in handling various types of web requests, including asynchronous tasks, 
+Javascript-enabled sites, and local requests.
+
+"""
+
+
+from proxylist import ProxyList
 import requests as _requests
 from pyppeteer import launch as _launch
-from random import choice as _choice
 import asyncio as _asyncio
-
-class ProxyList():
-    PROXY_LIST = []
-    
-    @classmethod
-    def is_empty(cls):
-        return cls.PROXY_LIST == []
-    
-    @classmethod
-    def get_random(cls):
-        
-        high_quality = []
-        
-        for ip in cls.PROXY_LIST:
-            if ip[4] == 'Transparent':
-                continue
-            elif int(ip[-1]) < 550:
-                continue
-            high_quality.append(ip)
-        
-        if high_quality != []:
-            x = _choice(high_quality)
-            print (x)
-            print (f'length: {len(cls.PROXY_LIST)}')
-            return x
-        return _choice(cls.PROXY_LIST)
-    
-    @classmethod
-    def update_proxies(cls):
-        while (cls.PROXY_LIST != []): cls.PROXY_LIST.pop(0)
-        cls.gen_proxies()
-    
-    @classmethod
-    async def grab_proxies_async(cls):
-        browser = await _launch()
-        page = await browser.newPage()
-        await page.goto('https://proxyscrape.com/free-proxy-list', waitUntil='networkidle0')
-        html = await page.content()    
-        await browser.close()
-        return html
-    
-    @classmethod
-    def gen_proxies(cls):
-        def parse(row):
-            row = row.split('</td><td>')
-            row[-1] = row[4].split('>')[-1].replace('ms', '')
-            row[4] = row[4].split('<')[0]
-            return row
-        try:
-            raw_html = _asyncio.get_event_loop().run_until_complete(cls.grab_proxies_async())
-            html = raw_html.split('</thead>')[1]
-            html = html.split('<tr><td>')
-            html.pop(0)
-            cls.PROXY_LIST = [parse(i) for i in html]
-            
-        except Exception as err:
-            raise Exception(f'{err}\n\n{raw_html}\n\nThere seems to have been an error with finding a proxy IP. Please note that free proxies may not be reliable.')
-
-    @classmethod
-    def set_proxies(cls, lst):
-        if len(lst) == 0: 
-            cls.PROXY_LIST = []
-            return
-        
-        if type(lst[0]) == list:
-            lst[0], lst[1] = str(lst[0]), str(lst[1])
-            for i in range (len(cls.PROXY_LIST)):
-                if ('.' not in lst[i][0]):
-                    raise Exception("Incorrect formatting for setting proxies. Must be [['23.144.56.65', '8080'], ...] or ['23.144.56.65:8080', ...]")
-                cls.PROXY_LIST.append(lst[i])
-        elif type(lst[0]) == str:
-            for i in range (len(cls.PROXY_LIST)):
-                if '://' in lst[0]:
-                    lst[0] = lst[0].split('://')[1]
-                if ('.' not in lst[i] or ':' not in lst[i]):
-                    raise Exception("Incorrect formatting for setting proxies. Must be [['23.144.56.65', '8080'], ...] or ['23.144.56.65:8080', ...]")
-                    
-                cls.PROXY_LIST.append(lst[i].split(':'))
-        raise Exception("Incorrect formatting for setting proxies. Must be [['23.144.56.65', '8080'], ...] or ['23.144.56.65:8080', ...]")
-
+import time as _time
 
 
 
@@ -164,7 +97,6 @@ def get_async(urls, use_proxy=False, retries=5, enable_js=False, time_rest=0, *a
     """
     # only import if async functionality is needed
     import threading as _threading
-    import time as _time
     if type(urls) == str:
         return [get(urls, use_proxy=use_proxy, retries=retries, enable_js=enable_js, *args, **kwargs)]
 
@@ -186,8 +118,26 @@ def get_local(filename:str, local_read_type:str='r', encoding:str='utf-8'):
     return data
 
 def download(url: str, local_filename:str=None, use_proxy=False, retries=5) -> None:
+    """
+    Downloads a file from a given URL and saves it locally.
+
+    This function retrieves a file from a specified URL and saves it to a local directory. The file will be saved with the filename from the URL if no local filename is specified.
+
+    Parameters:
+    url (str): The URL of the file to be downloaded. Must include a file extension.
+    local_filename (str, optional): The name to be used when saving the file locally. If none is provided, the function uses the filename from the URL. Must include a file extension if provided.
+    use_proxy (bool, optional): If set to True, the function will use a proxy server for the download. Defaults to False.
+    retries (int, optional): The number of retry attempts for the download in case of failure. Defaults to 5.
+
+    Returns:
+    None
+
+    Raises:
+    ValueError: If 'url' does not contain a file extension or if there was an error fetching the URL.
+    ValueError: If 'local_filename' is specified but does not contain a file extension.
+    """
     if '.' not in url:
-        raise Exception("Argument 'url' needs a filepath extention")
+        raise ValueError("Argument 'url' needs a filepath extention")
     
 
     if local_filename is not None:
@@ -207,19 +157,51 @@ def download(url: str, local_filename:str=None, use_proxy=False, retries=5) -> N
     else:
         raise Exception(f"Error fetching url. Status code - {response.status_code}")
 
-def download_async(urls:list, names:list=None, use_proxy=False, retries=5, time_rest=0) -> None:
-    if names is not None:
-        if len(urls) != len(names):
-            raise Exception("Lists 'url' and 'name' must be of equal length.")
+def download_async(urls:list, local_filename:list=None, use_proxy=False, retries=5, time_rest=0) -> None:
+    """
+    Executes multiple file downloads asynchronously from a list of given URLs and saves them locally.
+
+    This function uses threading to download multiple files simultaneously. Each file is saved with a filename from the list of local filenames, if provided. If no local filename is provided, the function uses the filename from the corresponding URL.
+
+    Parameters:
+    urls (list of str): The URLs of the files to be downloaded. Each URL must include a file extension.
+    local_filename (list of str, optional): A list of names to be used when saving the files locally. If none is provided, the function uses the filename from each corresponding URL. Each filename must include a file extension if provided. Must be of same length as 'urls' if provided.
+    use_proxy (bool, optional): If set to True, the function will use a proxy server for the downloads. Defaults to False.
+    retries (int, optional): The number of retry attempts for the downloads in case of failure. Defaults to 5.
+    time_rest (int, optional): The amount of time to rest between the start of each download thread. Defaults to 0 seconds.
+
+    Returns:
+    None
+
+    Raises:
+    TypeError: If any of the arguments are not of the desired data type.
+    ValueError: If 'local_filename' is specified but does not match the length of 'urls' or if a URL does not contain a file extension.
+    ValueError: If a 'local_filename' is specified but does not contain a file extension.
+    """
+    if (not isinstance(urls, list)):
+        raise TypeError("Argument 'urls' must be a list")
+    elif (not isinstance(local_filename, list)):
+        raise TypeError("Argument 'local_filename' must be a list")
+    elif (not isinstance(use_proxy, bool)):
+        raise TypeError("Argument 'use_proxy' must be a bool")
+    elif (not isinstance(retries, int)):
+        raise TypeError("Argument 'retries' must be a int")
+    elif (not (isinstance(time_rest, int) or isinstance(time_rest, float))):
+        raise TypeError("Argument 'retries' must be a int or float")
+
+
+    if local_filename is not None:
+        if len(urls) != len(local_filename):
+            raise ValueError("Lists 'url' and 'name' must be of equal length.")
     else:
-        names = [None for _ in range(len(urls))]
+        local_filename = [None for _ in range(len(urls))]
 
     # only import if async functionality is needed
     import threading as _threading
     import time as _time
 
     threads = []
-    for url, name in zip(urls, names):
+    for url, name in zip(urls, local_filename):
         threads.append(_threading.Thread(target=download, args=[url, name, use_proxy, retries]))
         threads[-1].start()
         _time.sleep(time_rest)
@@ -239,6 +221,20 @@ def post(url:str, data=None, json=None, **kwargs):
     return _requests.post(url, data=data, json=json, **kwargs)
 
 def post_local(filepath:str, data:str, local_save_type:str="w", encoding:str='utf-8') -> None:
+    """
+    Writes data to a local file.
+
+    This function is used to write or append data to a local file. It can be used in various scenarios such as saving request data, logging, or other local storage needs.
+
+    Parameters:
+    filepath (str): The path to the file where the data will be written. If the file does not exist, it will be created.
+    data (str): The data that will be written to the file.
+    local_save_type (str, optional): The mode in which the file is opened. Defaults to 'w' (write mode), and can also be set to 'a' (append mode) or any other valid file mode.
+    encoding (str, optional): The encoding to be used when opening the file. Defaults to 'utf-8'.
+
+    Returns:
+    None
+    """
     with open(filepath, local_save_type, encoding=encoding) as f:
         f.write(str(data))
 
