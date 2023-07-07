@@ -86,7 +86,7 @@ class ProxyList():
 
 
 
-def get(url: str, use_proxy=False, retries=5, enable_js=False, *args, **kwargs) -> str: 
+def get(url: str, use_proxy=False, retries=5, enable_js=False, *args, **kwargs): 
     """
     Gets the content at the specified URL.
 
@@ -107,7 +107,20 @@ def get(url: str, use_proxy=False, retries=5, enable_js=False, *args, **kwargs) 
         raise ValueError ("Url must start with http. use get_local() for local requests.")
     elif any([url.startswith(i) for i in url_file_starts]):        
         if enable_js:
-            return __grab_enable_js(url)
+            try:
+                res = __grab_enable_js(url)
+            except RuntimeError as err:
+                if "This event loop is already running" in str(err):
+                    raise RuntimeError("enable_js=True unsupported in jupiter environment.")
+                else:
+                    raise RuntimeError(err)
+            
+            resp = _requests.models.Response()
+            resp.status_code = 200
+            resp.headers = {'header_key': 'NaN'}  # replace with your actual headers
+            resp._content = str(res).encode("utf-8")  # replace with your actual HTML content
+            resp.request = _requests.models.PreparedRequest()
+            return resp
         else:
             session = _requests.Session()
             retry = _requests.packages.urllib3.util.retry.Retry(total=retries, backoff_factor=0.1, status_forcelist=[500, 502, 503, 504])
@@ -128,7 +141,7 @@ def get(url: str, use_proxy=False, retries=5, enable_js=False, *args, **kwargs) 
                 except Exception as err:
                     raise Exception(f'{err}\n\nThere seems to have been an error with the proxy IP. Please note that free proxies may not be reliable.')
 
-            return str(session.get(url, *args, **kwargs).text)
+            return session.get(url, *args, **kwargs)
     raise Exception(f"Invalid url: {url}")
     
 def get_async(urls, use_proxy=False, retries=5, enable_js=False, time_rest=0, *args, **kwargs) -> list:
@@ -172,27 +185,24 @@ def get_local(filename:str, local_read_type:str='r', encoding:str='utf-8'):
         data = f.read()
     return data
 
-def download(url: str, name:str=None, use_proxy=False, retries=5) -> None:
+def download(url: str, local_filename:str=None, use_proxy=False, retries=5) -> None:
     if '.' not in url:
         raise Exception("Argument 'url' needs a filepath extention")
     
 
-    if name is not None:
-        if '.' not in name:
-            if '.' in url:
-                name += '.' + url.split('.')[-1]
-        elif name.split('.')[-1] != url.split('.')[-1]:
-            raise Exception ("File extentions for 'url' and 'name' must match.")
+    if local_filename is not None:
+        if '.' not in local_filename:
+            raise ValueError("Argument 'local_filename' must have file extention.")
     elif '/' in url:
-        name = url.split('/')[-1]
+        local_filename = url.split('/')[-1]
     else:
-        name=url
+        local_filename=url
         
 
     response = get(url, use_proxy=use_proxy, retries=retries)
 
     if response.status_code == 200:
-        with open(name, 'wb') as f:
+        with open(local_filename, 'wb') as f:
             f.write(response.content)
     else:
         raise Exception(f"Error fetching url. Status code - {response.status_code}")
@@ -278,7 +288,7 @@ def __grab_thread_wrapper(url:str, payload:list, args, kwargs, use_proxy=False, 
     payload.append(res)
 
 def __grab_enable_js(url):
-    return _asyncio.get_event_loop().run_until_complete(__grab_enable_js_async(url)) 
+    return _asyncio.get_event_loop().run_until_complete(__grab_enable_js_async(url))
 
 async def __grab_enable_js_async(url):
     browser = await _launch()
