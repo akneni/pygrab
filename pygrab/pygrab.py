@@ -11,7 +11,7 @@ Javascript-enabled sites, and local requests.
 """
 
 
-from proxylist import ProxyList
+from .proxylist import ProxyList
 import requests as _requests
 from pyppeteer import launch as _launch
 import asyncio as _asyncio
