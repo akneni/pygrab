@@ -18,7 +18,6 @@ import asyncio as _asyncio
 import time as _time
 
 
-
 def get(url: str, use_proxy=False, retries=5, enable_js=False, *args, **kwargs): 
     """
     Gets the content at the specified URL.
@@ -89,7 +88,7 @@ def get(url: str, use_proxy=False, retries=5, enable_js=False, *args, **kwargs):
             return session.get(url, *args, **kwargs)
     raise Exception(f"Invalid url: {url}")
     
-def get_async(urls, use_proxy=False, retries=5, enable_js=False, time_rest=0, *args, **kwargs) -> list:
+def get_async(urls, use_proxy=False, retries=5, enable_js=False, thread_limit=800, time_rest=0, *args, **kwargs) -> list:
     """
     Gets multiple URLs asynchronously.
 
@@ -100,6 +99,7 @@ def get_async(urls, use_proxy=False, retries=5, enable_js=False, time_rest=0, *a
         urls (list): A list of URLs to grab.
         use_proxy (bool, optional): If True, uses a proxy for the HTTP requests. Defaults to False.
         retries (int, optional): The number of times to retry the HTTP request in case of failure. Defaults to 5.
+        thread_limit (int, optional): The maximum number of threads that will be spawned. 
         time_rest (int, optional): The time in seconds to wait between starting each thread. Defaults to 0.
         *args: Variable length argument list to pass to the get function.
         **kwargs: Arbitrary keyword arguments to pass to the get function.
@@ -110,8 +110,8 @@ def get_async(urls, use_proxy=False, retries=5, enable_js=False, time_rest=0, *a
     Raises:
         TypeError: If any of the arguments are not of the desired data type.
     """
-    if not (isinstance(urls, list)):
-        raise TypeError("Argument 'urls' must be a list")
+    if (isinstance(urls, (str, int, float, bool))):
+        raise TypeError("Argument 'urls' must be an iterable object")
     elif not (isinstance(use_proxy, bool)):
         raise TypeError("Argument 'use_proxy' must be a bool")
     elif not (isinstance(retries, int)):
@@ -125,15 +125,21 @@ def get_async(urls, use_proxy=False, retries=5, enable_js=False, time_rest=0, *a
     if type(urls) == str:
         return [get(urls, use_proxy=use_proxy, retries=retries, enable_js=enable_js, *args, **kwargs)]
 
+
     result = []
-    threads = []
-    for url in urls:
-        threads.append(_threading.Thread(target=__grab_thread_wrapper, args=[url, result, args, kwargs, use_proxy, retries, enable_js]))
-        threads[-1].start()
-        _time.sleep(time_rest)
-    
-    for thread in threads:
-        thread.join()
+    thread_counter = 0
+
+    while thread_counter < len(urls):
+        sub_urls = urls[thread_counter:thread_counter+thread_limit]
+        threads = []
+        for url in sub_urls:
+            threads.append(_threading.Thread(target=__grab_thread_wrapper, args=[url, result, args, kwargs, use_proxy, retries, enable_js]))
+            threads[-1].start()
+            _time.sleep(time_rest)
+        
+        for thread in threads:
+            thread.join()
+        thread_counter += thread_limit
         
     return result
 
@@ -217,7 +223,7 @@ def download(url: str, local_filename:str=None, use_proxy=False, retries=5) -> N
     else:
         raise Exception(f"Error fetching url. Status code - {response.status_code}")
 
-def download_async(urls:list, local_filename:list=None, use_proxy=False, retries=5, time_rest=0) -> None:
+def download_async(urls:list, local_filename:list=None, use_proxy=False, retries=5, thread_limit=500, time_rest=0) -> None:
     """
     Executes multiple file downloads asynchronously from a list of given URLs and saves them locally.
 
@@ -228,6 +234,7 @@ def download_async(urls:list, local_filename:list=None, use_proxy=False, retries
         local_filename (list of str, optional): A list of names to be used when saving the files locally. If none is provided, the function uses the filename from each corresponding URL. Each filename must include a file extension if provided. Must be of same length as 'urls' if provided.
         use_proxy (bool, optional): If set to True, the function will use a proxy server for the downloads. Defaults to False.
         retries (int, optional): The number of retry attempts for the downloads in case of failure. Defaults to 5.
+        thread_limit (int, optional): The maximum number of threads that will be spawned. 
         time_rest (int, optional): The amount of time to rest between the start of each download thread. Defaults to 0 seconds.
 
     Returns:
@@ -238,10 +245,10 @@ def download_async(urls:list, local_filename:list=None, use_proxy=False, retries
         ValueError: If 'local_filename' is specified but does not match the length of 'urls' or if a URL does not contain a file extension.
         ValueError: If a 'local_filename' is specified but does not contain a file extension.
     """
-    if not (isinstance(urls, list)):
-        raise TypeError("Argument 'urls' must be a list")
-    elif not (isinstance(local_filename, list) or local_filename is None):
-        raise TypeError("Argument 'local_filename' must be a list")
+    if (isinstance(urls, (str, int, float, bool))):
+        raise TypeError("Argument 'urls' must be an iterable object")
+    elif (isinstance(local_filename, (str, int, float, bool)) or local_filename is None):
+        raise TypeError("Argument 'local_filename' must be an iterable object")
     elif not (isinstance(use_proxy, bool)):
         raise TypeError("Argument 'use_proxy' must be a bool")
     elif not (isinstance(retries, int)):
@@ -258,16 +265,21 @@ def download_async(urls:list, local_filename:list=None, use_proxy=False, retries
 
     # only import if async functionality is needed
     import threading as _threading
-    import time as _time
 
-    threads = []
-    for url, name in zip(urls, local_filename):
-        threads.append(_threading.Thread(target=download, args=[url, name, use_proxy, retries]))
-        threads[-1].start()
-        _time.sleep(time_rest)
-    
-    for thread in threads:
-        thread.join()
+    thread_counter = 0
+    while (thread_counter < len(urls)):
+        threads = []
+        sub_urls = urls[thread_counter:thread_counter+thread_limit]
+        sub_local_filename= local_filename[thread_counter:thread_counter+thread_limit]
+
+        for url, name in zip(sub_urls, sub_local_filename):
+            threads.append(_threading.Thread(target=download, args=[url, name, use_proxy, retries]))
+            threads[-1].start()
+            _time.sleep(time_rest)
+        
+        for thread in threads:
+            thread.join()
+        thread_counter += thread_limit
     
 
 def head(url, **kwargs):
