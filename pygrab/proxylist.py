@@ -1,7 +1,5 @@
 from random import choice as _choice
 import asyncio as _asyncio
-from pyppeteer import launch as _launch
-
 
 class ProxyList():
     PROXY_LIST = []
@@ -36,12 +34,13 @@ class ProxyList():
     
     @classmethod
     async def grab_proxies_async(cls):
-        browser = await _launch()
-        page = await browser.newPage()
-        await page.goto('https://proxyscrape.com/free-proxy-list', waitUntil='networkidle0')
-        html = await page.content()    
-        await browser.close()
-        return html
+        raise NotImplementedError("Async functionality for gathering proxies is currently not supported.")
+        # browser = await _launch()
+        # page = await browser.newPage()
+        # await page.goto('https://proxyscrape.com/free-proxy-list', waitUntil='networkidle0')
+        # html = await page.content()    
+        # await browser.close()
+        # return html
     
     @classmethod
     def gen_proxies(cls):

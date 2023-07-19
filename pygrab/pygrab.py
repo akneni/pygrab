@@ -13,7 +13,7 @@ Javascript-enabled sites, and local requests.
 
 from .proxylist import ProxyList
 import requests as _requests
-from pyppeteer import launch as _launch
+# from pyppeteer import launch as _launch
 import asyncio as _asyncio
 import time as _time
 
@@ -359,9 +359,10 @@ def __grab_enable_js(url):
     return _asyncio.get_event_loop().run_until_complete(__grab_enable_js_async(url))
 
 async def __grab_enable_js_async(url):
-    browser = await _launch()
-    page = await browser.newPage()
-    await page.goto(url, waitUntil='networkidle0')
-    html = await page.content()    
-    await browser.close()
-    return html
+    return ""
+    # browser = await _launch()
+    # page = await browser.newPage()
+    # await page.goto(url, waitUntil='networkidle0')
+    # html = await page.content()    
+    # await browser.close()
+    # return html
