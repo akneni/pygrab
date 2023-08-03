@@ -13,9 +13,11 @@ Javascript-enabled sites, and local requests.
 
 from .proxylist import ProxyList
 import requests as _requests
-# from pyppeteer import launch as _launch
+from pyppeteer import launch as _launch
 import asyncio as _asyncio
 import time as _time
+import socket as _socket
+import re as _re
 
 
 def get(url: str, use_proxy=False, retries=5, enable_js=False, *args, **kwargs): 
@@ -93,7 +95,8 @@ def get_async(urls, use_proxy=False, retries=5, enable_js=False, thread_limit=80
     Gets multiple URLs asynchronously.
 
     This function sends HTTP requests to a list of URLs in separate threads, allowing for concurrent HTTP requests.
-    The function returns a list of responses from the grabbed URLs.
+    The function returns a list of responses from the grabbed URLs. For each request that had a connection error,
+    the list will contain the error object instead of the requests.response object in it's spot.
 
     Args:
         urls (list): A list of URLs to grab.
@@ -105,7 +108,7 @@ def get_async(urls, use_proxy=False, retries=5, enable_js=False, thread_limit=80
         **kwargs: Arbitrary keyword arguments to pass to the get function.
 
     Returns:
-        list: A list of responses from the grabbed URLs.
+        list: A list of responses (and possibly error objects) from the grabbed URLs.
     
     Raises:
         TypeError: If any of the arguments are not of the desired data type.
@@ -143,7 +146,7 @@ def get_async(urls, use_proxy=False, retries=5, enable_js=False, thread_limit=80
         
     return result
 
-def get_local(filename:str, local_read_type:str='r', encoding:str='utf-8'):
+def get_local(filename:str, local_read_type:str='r', encoding:str='utf-8') -> str:
     """
     Reads the contens of a file and returns it to the user.
 
@@ -322,6 +325,92 @@ def delete(url, **kwargs):
 def options(url, **kwargs):
     return _requests.options(url, **kwargs)
 
+def scan_ip(ip:str, port:int=80, timeout:int=1) -> bool:
+    """
+    Scans a given IP address to check if it's online.
+
+    This function attempts to connect to a specified IP address and port, returning True if the connection is successful
+    and False otherwise.
+
+    Args:
+        ip (str): The IP address to scan, in the format '10.0.0.3'.
+        port (int, optional): The port number to connect to. Defaults to 80.
+        timeout (int, optional): The timeout in seconds for the connection attempt. Defaults to 1.
+
+    Returns:
+        bool: True if the IP address is online, False otherwise.
+
+    Raises:
+        TypeError: If the 'ip' argument is not a string.
+        ValueError: If the 'ip' argument is not in the correct format or if an invalid IP address is provided.
+    """
+    if not isinstance(ip, str):
+        raise TypeError("Argument 'ip' must be a string.")
+
+    pattern = r'^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$'
+    if not _re.match(pattern, ip):
+        raise ValueError("Argument 'ip' must be in the format 10.0.0.3")
+
+    try:
+        session = _socket.socket(_socket.AF_INET, _socket.SOCK_STREAM)
+        session.settimeout(timeout)
+        session.connect((ip, port))
+        session.close()
+        return True
+    except (_socket.timeout, ConnectionRefusedError):
+        return False
+    except OSError:
+        raise ValueError("Invalid ip address.")
+
+def scan_iprange(ips:str, port:int=80, timeout:int=1) -> list:
+    """
+    Scans a range of IP addresses to check which ones are online.
+
+    This function scans a specified range of IP addresses, returning a list of those that are online.
+
+    Args:
+        ips (str): The IP address range to scan, in the format '10.0.0.1-255'.
+        port (int, optional): The port number to connect to. Defaults to 80.
+        timeout (int, optional): The timeout in seconds for the connection attempt. Defaults to 1.
+
+    Returns:
+        list: A list of IP addresses that are online within the specified range.
+
+    Raises:
+        TypeError: If the 'ips' argument is not a string.
+        ValueError: If the 'ips' argument is not in the correct format or if the IP range start is greater or equal to 255.
+    """
+    import threading as _threading
+
+    if not isinstance(ips, str):
+        raise TypeError("Argument 'ips' must be a string.")
+
+    ips = ips.replace(' ', '')
+    pattern = r'^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}-\d{1,3}$'
+    if not _re.match(pattern, ips):
+        raise ValueError("Argument 'ips' must be in the format 10.0.0.1-255")
+
+    first_three = ips.replace(ips.split('.')[-1], '')
+    start, end = ips.split('.')[-1].split('-')
+    ip_range = [first_three + str(i) for i in range (int(start), int(end)+1)]
+
+    if start >= 255:
+        raise ValueError('Ip range must start below 255.')
+
+    threads = []
+    res = {i:False for i in ip_range}
+
+    for i in ip_range:
+        threads.append(
+            _threading.Thread(target=__scan_ip_wrapper, args=[i, port, timeout, res])
+        )
+        threads[-1].start()
+    
+    for i in threads:
+        i.join()
+    
+    return [key for key, value, in res.items() if value]
+
 def set_proxies(proxies:list):
     """Lets the user use their own proxies in the library
 
@@ -352,17 +441,25 @@ def update_proxies():
     ProxyList.update_proxies()
 
 def __grab_thread_wrapper(url:str, payload:list, args, kwargs, use_proxy=False, retries=5, enable_js=False):
-    res = get(url, use_proxy=use_proxy, retries=retries, enable_js=enable_js, *args, **kwargs)
-    payload.append(res)
+    try:
+        res = get(url, use_proxy=use_proxy, retries=retries, enable_js=enable_js, *args, **kwargs)
+        payload.append(res)
+    except _requests.exceptions.RequestException as err:
+        payload.append(err)
+
+def __scan_ip_wrapper(ip, port, timeout, res):
+    try:
+        res[ip] = scan_ip(ip=ip, port=port, timeout=timeout)
+    except ValueError:
+        pass
 
 def __grab_enable_js(url):
     return _asyncio.get_event_loop().run_until_complete(__grab_enable_js_async(url))
 
 async def __grab_enable_js_async(url):
-    return ""
-    # browser = await _launch()
-    # page = await browser.newPage()
-    # await page.goto(url, waitUntil='networkidle0')
-    # html = await page.content()    
-    # await browser.close()
-    # return html
+    browser = await _launch()
+    page = await browser.newPage()
+    await page.goto(url, waitUntil='networkidle0')
+    html = await page.content()    
+    await browser.close()
+    return html
