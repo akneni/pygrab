@@ -27,7 +27,7 @@ class Tor():
 
         if cls.__tor_path is None:
             tor_path = _Path(_os.path.dirname(_os.path.realpath(__file__)))
-            cls.__tor_path = _os.path.join(tor_path, "../tor-dependencies")
+            cls.__tor_path = _os.path.join(tor_path, "./tor-dependencies")
 
         if 'tor' not in _os.listdir(cls.__tor_path):
             error_msg = "It seems like you're missing the tor.exe dependency. You can download it from 'https://www.torproject.org/download/tor/'.\n"
@@ -72,7 +72,7 @@ class Tor():
     def load_tor_dependencies(cls, filepath:str):
         if cls.__tor_path is None:
             tor_path = _Path(_os.path.dirname(_os.path.realpath(__file__)))
-            cls.__tor_path = _os.path.join(tor_path, "../tor-dependencies")
+            cls.__tor_path = _os.path.join(tor_path, "./tor-dependencies")
         
         if filepath.endswith('.tar.gz'):
             with _tarfile.open(filepath, 'r:gz') as tar:
