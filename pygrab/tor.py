@@ -27,6 +27,8 @@ class Tor():
 
         if cls.__tor_path is None:
             tor_path = _Path(_os.path.dirname(_os.path.realpath(__file__)))
+            if "./tor-dependencies" not in _os.listdir(tor_path):
+                _os.mkdir(_os.path.join(tor_path, "./tor-dependencies"))
             cls.__tor_path = _os.path.join(tor_path, "./tor-dependencies")
 
         if 'tor' not in _os.listdir(cls.__tor_path):
@@ -72,6 +74,8 @@ class Tor():
     def load_tor_dependencies(cls, filepath:str):
         if cls.__tor_path is None:
             tor_path = _Path(_os.path.dirname(_os.path.realpath(__file__)))
+            if "./tor-dependencies" not in _os.listdir(tor_path):
+                _os.mkdir(_os.path.join(tor_path, "./tor-dependencies"))
             cls.__tor_path = _os.path.join(tor_path, "./tor-dependencies")
         
         if filepath.endswith('.tar.gz'):
