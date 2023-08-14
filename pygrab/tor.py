@@ -1,8 +1,8 @@
 import subprocess as _subprocess
-import requests as _requests
 import os as _os
 import atexit as _atexit
 import signal as _signal
+import tarfile as _tarfile
 from pathlib import Path as _Path
 
 class Tor():
@@ -21,7 +21,7 @@ class Tor():
     }
 
     @classmethod
-    def start_tor(cls, verbose=0):
+    def start_tor(cls, verbose:int=0):
         if cls.__tor_service_enabled:
             cls.end_tor()
 
@@ -29,11 +29,21 @@ class Tor():
             tor_path = _Path(_os.path.dirname(_os.path.realpath(__file__)))
             cls.__tor_path = _os.path.join(tor_path, "../tor-dependencies")
 
-            if 'tor.exe' not in _os.listdir(cls.__tor_path):
-                _requests.get("placeholder")
-                
-
-        cls.__tor_process = _subprocess.Popen([_os.path.join(cls.__tor_path, 'tor.exe')], stdout=_subprocess.PIPE, stderr=_subprocess.STDOUT, text=True)
+        if 'tor' not in _os.listdir(cls.__tor_path):
+            error_msg = "It seems like you're missing the tor.exe dependency. You can download it from 'https://www.torproject.org/download/tor/'.\n"
+            error_msg += "Then call pygrab.Tor.load_tor_dependencies(./path/to/tor-something-something.tar.gz)"
+            raise FileNotFoundError (error_msg)
+        elif 'tor.exe' not in _os.listdir(_os.path.join(cls.__tor_path, './tor')):
+            error_msg = "It seems like you're missing the tor.exe dependency. You can download it from 'https://www.torproject.org/download/tor/'.\n"
+            error_msg += "Then call pygrab.Tor.load_tor_dependencies(./path/to/tor-something-something.tar.gz)"
+            raise FileNotFoundError (error_msg)
+        
+        cls.__tor_process = _subprocess.Popen(
+            [_os.path.join(cls.__tor_path, './tor/tor.exe')], 
+            stdout=_subprocess.PIPE, 
+            stderr=_subprocess.STDOUT, 
+            text=True
+        )
 
         _atexit.register(cls.end_tor)
         _signal.signal(_signal.SIGTERM, cls.__signal_handler)
@@ -55,8 +65,25 @@ class Tor():
             cls.__tor_service_enabled = False
 
     @classmethod
-    def get_status(cls):
+    def get_status(cls) -> bool:
         return cls.__tor_service_enabled
+    
+    @classmethod
+    def load_tor_dependencies(cls, filepath:str):
+        if cls.__tor_path is None:
+            tor_path = _Path(_os.path.dirname(_os.path.realpath(__file__)))
+            cls.__tor_path = _os.path.join(tor_path, "../tor-dependencies")
+        
+        if filepath.endswith('.tar.gz'):
+            with _tarfile.open(filepath, 'r:gz') as tar:
+                tar.extractall(path=cls.__tor_path)
+        elif filepath.endswith('tor.exe'):
+            if 'tor' not in _os.listdir(cls.__tor_path):
+                _os.mkdir(_os.path.join(cls.__tor_path, "./tor"))
+            with open(filepath, 'rb') as f:
+                data = f.read()
+            with open (_os.path.join(cls.__tor_path, "./tor/tor.exe"), 'wb') as f:
+                f.write(data)
 
     @classmethod
     def __signal_handler(cls, signum, frame):
