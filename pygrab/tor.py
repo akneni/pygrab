@@ -25,12 +25,7 @@ class Tor():
         if cls.__tor_service_enabled:
             cls.end_tor()
 
-        if cls.__tor_path is None:
-            tor_path = _Path(_os.path.dirname(_os.path.realpath(__file__)))
-            if "./tor-dependencies" not in _os.listdir(tor_path):
-                _os.mkdir(_os.path.join(tor_path, "./tor-dependencies"))
-            cls.__tor_path = _os.path.join(tor_path, "./tor-dependencies")
-
+        cls.__tor_path_init()  
         if 'tor' not in _os.listdir(cls.__tor_path):
             error_msg = "It seems like you're missing the tor.exe dependency. You can download it from 'https://www.torproject.org/download/tor/'.\n"
             error_msg += "Then call pygrab.Tor.load_tor_dependencies(./path/to/tor-something-something.tar.gz)"
@@ -72,12 +67,7 @@ class Tor():
     
     @classmethod
     def load_tor_dependencies(cls, filepath:str):
-        if cls.__tor_path is None:
-            tor_path = _Path(_os.path.dirname(_os.path.realpath(__file__)))
-            if "./tor-dependencies" not in _os.listdir(tor_path):
-                _os.mkdir(_os.path.join(tor_path, "./tor-dependencies"))
-            cls.__tor_path = _os.path.join(tor_path, "./tor-dependencies")
-        
+        cls.__tor_path_init()        
         if filepath.endswith('.tar.gz'):
             with _tarfile.open(filepath, 'r:gz') as tar:
                 tar.extractall(path=cls.__tor_path)
@@ -88,6 +78,14 @@ class Tor():
                 data = f.read()
             with open (_os.path.join(cls.__tor_path, "./tor/tor.exe"), 'wb') as f:
                 f.write(data)
+
+    @classmethod
+    def __tor_path_init(cls):
+        if cls.__tor_path is None:
+            tor_path = _Path(_os.path.dirname(_os.path.realpath(__file__)))
+            if "tor-dependencies" not in _os.listdir(tor_path):
+                _os.mkdir(_os.path.join(tor_path, "./tor-dependencies"))
+            cls.__tor_path = _os.path.join(tor_path, "./tor-dependencies")
 
     @classmethod
     def __signal_handler(cls, signum, frame):
