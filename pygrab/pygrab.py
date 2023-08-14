@@ -11,7 +11,8 @@ Javascript-enabled sites, and local requests.
 """
 
 
-from .proxylist import ProxyList
+from .tor import Tor
+from requests import Session
 import requests as _requests
 from pyppeteer import launch as _launch
 import asyncio as _asyncio
@@ -20,13 +21,12 @@ import socket as _socket
 import re as _re
 
 
-def get(url: str, use_proxy=False, retries=5, enable_js=False, *args, **kwargs): 
+def get(url: str, retries=5, enable_js=False, *args, **kwargs): 
     """
     Gets the content at the specified URL.
 
     Parameters:
         url (str): The URL to get.
-        use_proxy (bool, optional): Whether to use a proxy. Defaults to False.
         retries (int, optional): The number of times to retry the request if it fails. Defaults to 5.
         encoding (str, optional): The encoding to use when reading the response. Defaults to 'utf-8'.
         *args: Variable length argument list passed to requests.get.
@@ -40,8 +40,6 @@ def get(url: str, use_proxy=False, retries=5, enable_js=False, *args, **kwargs):
     """
     if not (isinstance(url, str)):
         raise TypeError("Argument 'url' must be a str")
-    elif not (isinstance(use_proxy, bool)):
-        raise TypeError("Argument 'use_proxy' must be a bool")
     elif not (isinstance(retries, int)):
         raise TypeError("Argument 'retries' must be a int")
     elif not (isinstance(enable_js, bool)):
@@ -73,34 +71,28 @@ def get(url: str, use_proxy=False, retries=5, enable_js=False, *args, **kwargs):
             adapter = _requests.adapters.HTTPAdapter(max_retries=retry)
             session.mount('http://', adapter)
             session.mount('https://', adapter)
-            
-            if use_proxy:
-                if ProxyList.is_empty():
-                    ProxyList.gen_proxies()
-                temp_prox = ProxyList.get_random()
-                proxies = {
-                    'http': f'http://{temp_prox[0]}:{temp_prox[1]}',
-                    'https': f'https://{temp_prox[0]}:{temp_prox[1]}'
-                }
-                try:
-                    return session.get(url, *args, **kwargs, proxies=proxies)
-                except Exception as err:
-                    raise Exception(f'{err}\n\nThere seems to have been an error with the proxy IP. Please note that free proxies may not be reliable.')
 
-            return session.get(url, *args, **kwargs)
+            if Tor.get_status():
+                if 'proxies' in kwargs.keys():
+                    raise ValueError ("Cannot specify 'proxies' parameter while using tor.")
+                elif 'headers' in kwargs.keys():
+                    raise ValueError ("Cannot specify 'headers' parameter while using tor.")
+            
+                return session.get(url, headers=Tor.tor_headers, proxies=Tor.tor_proxies, *args, **kwargs)
+            else:
+                return session.get(url, *args, **kwargs)
     raise Exception(f"Invalid url: {url}")
     
-def get_async(urls, use_proxy=False, retries=5, enable_js=False, thread_limit=800, time_rest=0, *args, **kwargs) -> list:
+def get_async(urls, retries=5, enable_js=False, thread_limit=800, time_rest=0, *args, **kwargs) -> list:
     """
     Gets multiple URLs asynchronously.
 
     This function sends HTTP requests to a list of URLs in separate threads, allowing for concurrent HTTP requests.
     The function returns a list of responses from the grabbed URLs. For each request that had a connection error,
-    the list will contain the error object instead of the requests.response object in it's spot.
+    a warning will be printed to the console.
 
     Args:
         urls (list): A list of URLs to grab.
-        use_proxy (bool, optional): If True, uses a proxy for the HTTP requests. Defaults to False.
         retries (int, optional): The number of times to retry the HTTP request in case of failure. Defaults to 5.
         thread_limit (int, optional): The maximum number of threads that will be spawned. 
         time_rest (int, optional): The time in seconds to wait between starting each thread. Defaults to 0.
@@ -108,15 +100,13 @@ def get_async(urls, use_proxy=False, retries=5, enable_js=False, thread_limit=80
         **kwargs: Arbitrary keyword arguments to pass to the get function.
 
     Returns:
-        list: A list of responses (and possibly error objects) from the grabbed URLs.
+        list: A list of responses from the grabbed URLs.
     
     Raises:
         TypeError: If any of the arguments are not of the desired data type.
     """
     if (isinstance(urls, (str, int, float, bool))):
         raise TypeError("Argument 'urls' must be an iterable object")
-    elif not (isinstance(use_proxy, bool)):
-        raise TypeError("Argument 'use_proxy' must be a bool")
     elif not (isinstance(retries, int)):
         raise TypeError("Argument 'retries' must be a int")
     elif not (isinstance(enable_js, bool)):
@@ -126,7 +116,7 @@ def get_async(urls, use_proxy=False, retries=5, enable_js=False, thread_limit=80
 
     import threading as _threading # only import if async functionality is needed
     if type(urls) == str:
-        return [get(urls, use_proxy=use_proxy, retries=retries, enable_js=enable_js, *args, **kwargs)]
+        return [get(urls, retries=retries, enable_js=enable_js, *args, **kwargs)]
 
 
     result = []
@@ -136,7 +126,7 @@ def get_async(urls, use_proxy=False, retries=5, enable_js=False, thread_limit=80
         sub_urls = urls[thread_counter:thread_counter+thread_limit]
         threads = []
         for url in sub_urls:
-            threads.append(_threading.Thread(target=__grab_thread_wrapper, args=[url, result, args, kwargs, use_proxy, retries, enable_js]))
+            threads.append(_threading.Thread(target=__grab_thread_wrapper, args=[url, result, args, kwargs, retries, enable_js]))
             threads[-1].start()
             _time.sleep(time_rest)
         
@@ -176,7 +166,7 @@ def get_local(filename:str, local_read_type:str='r', encoding:str='utf-8') -> st
         data = f.read()
     return data
 
-def download(url: str, local_filename:str=None, use_proxy=False, retries=5) -> None:
+def download(url: str, local_filename:str=None, retries=5) -> None:
     """
     Downloads a file from a given URL and saves it locally.
 
@@ -185,7 +175,6 @@ def download(url: str, local_filename:str=None, use_proxy=False, retries=5) -> N
     Parameters:
         url (str): The URL of the file to be downloaded. Must include a file extension.
         local_filename (str, optional): The name to be used when saving the file locally. If none is provided, the function uses the filename from the URL. Must include a file extension if provided.
-        use_proxy (bool, optional): If set to True, the function will use a proxy server for the download. Defaults to False.
         retries (int, optional): The number of retry attempts for the download in case of failure. Defaults to 5.
 
     Returns:
@@ -200,8 +189,6 @@ def download(url: str, local_filename:str=None, use_proxy=False, retries=5) -> N
         raise TypeError("Argument 'url' must be a str")
     elif not (isinstance(local_filename, str) or local_filename is None):
         raise TypeError("Argument 'local_filename' must be a str")
-    elif not (isinstance(use_proxy, bool)):
-        raise TypeError("Argument 'use_proxy' must be a bool")
     elif not (isinstance(retries, int)):
         raise TypeError("Argument 'retries' must be a int")
     
@@ -218,7 +205,7 @@ def download(url: str, local_filename:str=None, use_proxy=False, retries=5) -> N
         local_filename=url
         
 
-    response = get(url, use_proxy=use_proxy, retries=retries)
+    response = get(url, retries=retries)
 
     if response.status_code == 200:
         with open(local_filename, 'wb') as f:
@@ -226,7 +213,7 @@ def download(url: str, local_filename:str=None, use_proxy=False, retries=5) -> N
     else:
         raise Exception(f"Error fetching url. Status code - {response.status_code}")
 
-def download_async(urls:list, local_filename:list=None, use_proxy=False, retries=5, thread_limit=500, time_rest=0) -> None:
+def download_async(urls:list, local_filename:list=None, retries=5, thread_limit=500, time_rest=0) -> None:
     """
     Executes multiple file downloads asynchronously from a list of given URLs and saves them locally.
 
@@ -235,7 +222,6 @@ def download_async(urls:list, local_filename:list=None, use_proxy=False, retries
     Parameters:
         urls (list of str): The URLs of the files to be downloaded. Each URL must include a file extension.
         local_filename (list of str, optional): A list of names to be used when saving the files locally. If none is provided, the function uses the filename from each corresponding URL. Each filename must include a file extension if provided. Must be of same length as 'urls' if provided.
-        use_proxy (bool, optional): If set to True, the function will use a proxy server for the downloads. Defaults to False.
         retries (int, optional): The number of retry attempts for the downloads in case of failure. Defaults to 5.
         thread_limit (int, optional): The maximum number of threads that will be spawned. 
         time_rest (int, optional): The amount of time to rest between the start of each download thread. Defaults to 0 seconds.
@@ -252,8 +238,6 @@ def download_async(urls:list, local_filename:list=None, use_proxy=False, retries
         raise TypeError("Argument 'urls' must be an iterable object")
     elif (isinstance(local_filename, (str, int, float, bool)) or local_filename is None):
         raise TypeError("Argument 'local_filename' must be an iterable object")
-    elif not (isinstance(use_proxy, bool)):
-        raise TypeError("Argument 'use_proxy' must be a bool")
     elif not (isinstance(retries, int)):
         raise TypeError("Argument 'retries' must be a int")
     elif not (isinstance(time_rest, int) or isinstance(time_rest, float)):
@@ -276,7 +260,7 @@ def download_async(urls:list, local_filename:list=None, use_proxy=False, retries
         sub_local_filename= local_filename[thread_counter:thread_counter+thread_limit]
 
         for url, name in zip(sub_urls, sub_local_filename):
-            threads.append(_threading.Thread(target=download, args=[url, name, use_proxy, retries]))
+            threads.append(_threading.Thread(target=download, args=[url, name, retries]))
             threads[-1].start()
             _time.sleep(time_rest)
         
@@ -325,6 +309,17 @@ def delete(url, **kwargs):
 def options(url, **kwargs):
     return _requests.options(url, **kwargs)
 
+def tor_status():
+    connection_data = get('http://ip-api.com/json').json()
+    print("Tor Service Enabled:  ", Tor.get_status())
+    print("Public Ip Address:    ", connection_data['query'])
+    if 'country' in connection_data.keys():
+        print("Country:              ", connection_data['country'])
+    if 'regionName' in connection_data.keys():
+        print("Region:               ", connection_data['regionName'])
+    if 'city' in connection_data.keys():
+        print("City:                 ", connection_data['city'])
+    
 def scan_ip(ip:str, port:int=80, timeout:int=1) -> bool:
     """
     Scans a given IP address to check if it's online.
@@ -411,41 +406,12 @@ def scan_iprange(ips:str, port:int=80, timeout:int=1) -> list:
     
     return [key for key, value, in res.items() if value]
 
-def set_proxies(proxies:list):
-    """Lets the user use their own proxies in the library
-
-    Args:
-        proxies (list): A list of proxies in the format [['23.144.56.65', '8080'], ...] or ['23.144.56.65:8080', ...]
-
-    Raises:
-        Exception: Raises an exception if the argument is not in the correct format
-    """
-    if (type(proxies) != list):
-        raise Exception("Incorrect formatting for setting proxies. Must be [['23.144.56.65', '8080'], ...] or ['23.144.56.65:8080', ...]")
-    ProxyList.set_proxies(proxies)
-
-def update_proxies():
-    """
-    Updates the list of proxy servers.
-
-    This method gets a fresh list of proxy servers from the source website and updates the class variable __PROXY_LIST.
-    Existing proxies in the list are removed before the update.
-
-    Note:
-        This method should be called periodically to ensure that the list of proxy servers is up-to-date and contains 
-        only working proxies.
-
-    Returns:
-        None
-    """
-    ProxyList.update_proxies()
-
-def __grab_thread_wrapper(url:str, payload:list, args, kwargs, use_proxy=False, retries=5, enable_js=False):
+def __grab_thread_wrapper(url:str, payload:list, args, kwargs, retries=5, enable_js=False):
     try:
-        res = get(url, use_proxy=use_proxy, retries=retries, enable_js=enable_js, *args, **kwargs)
+        res = get(url, retries=retries, enable_js=enable_js, *args, **kwargs)
         payload.append(res)
     except _requests.exceptions.RequestException as err:
-        payload.append(err)
+        print(f"Warning: Failed to grab {url} | {err}\n")
 
 def __scan_ip_wrapper(ip, port, timeout, res):
     try:
@@ -457,8 +423,16 @@ def __grab_enable_js(url):
     return _asyncio.get_event_loop().run_until_complete(__grab_enable_js_async(url))
 
 async def __grab_enable_js_async(url):
-    browser = await _launch()
+    if Tor.get_status():
+        proxy = Tor.tor_proxies['http'].replace('socks5h', 'socks5')
+        browser = await _launch(args=['--proxy-server=' + proxy])
+    else:
+        browser = await _launch()
+    
     page = await browser.newPage()
+    if Tor.get_status():
+        await page.setExtraHTTPHeaders(Tor.tor_headers)
+
     await page.goto(url, waitUntil='networkidle0')
     html = await page.content()    
     await browser.close()
