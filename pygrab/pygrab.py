@@ -13,7 +13,8 @@ Javascript-enabled sites, and local requests.
 
 from tor import Tor
 from session import Session
-from global_vars import GlobalVars as _GlobalVars
+from warning import Warning as _Warning
+from tor_rotation import TorRotation as _TorRotation
 import requests as _requests
 from pyppeteer import launch as _launch
 import asyncio as _asyncio
@@ -121,8 +122,8 @@ def get_async(urls:list, retries=5, enable_js=False, thread_limit=800, time_rest
 
     # If tor rotations isn't None, then make this entire batch of requests with one connection
     # and then the connection to be changed on the next request
-    reset_tor = 0 if _GlobalVars.Tor_Reconnect is None else _GlobalVars.Tor_Reconnect[1]
-    _GlobalVars.Tor_Reconnect = None
+    reset_tor = 0 if _TorRotation.Tor_Reconnect is None else _TorRotation.Tor_Reconnect[1]
+    _TorRotation.Tor_Reconnect = None
 
     result = {}
     thread_counter = 0
@@ -141,7 +142,7 @@ def get_async(urls:list, retries=5, enable_js=False, thread_limit=800, time_rest
     # If tor rotations isn't None, then make this entire batch of requests with one connection
     # and then the connection to be changed on the next request
     if reset_tor != 0:
-        _GlobalVars.Tor_Reconnect = [0, reset_tor]
+        _TorRotation.Tor_Reconnect = [0, reset_tor]
         
     return result
 
@@ -266,8 +267,8 @@ def download_async(urls:list, local_filename:list=None, retries=5, thread_limit=
 
     # If tor rotations isn't None, then make this entire batch of requests with one connection
     # and then the connection to be changed on the next request
-    reset_tor = 0 if _GlobalVars.Tor_Reconnect is None else _GlobalVars.Tor_Reconnect[1]
-    _GlobalVars.Tor_Reconnect = None
+    reset_tor = 0 if _TorRotation.Tor_Reconnect is None else _TorRotation.Tor_Reconnect[1]
+    _TorRotation.Tor_Reconnect = None
 
     # Uses the threading module to asynchrounously download the files
     thread_counter = 0
@@ -288,7 +289,7 @@ def download_async(urls:list, local_filename:list=None, retries=5, thread_limit=
     # If tor rotations isn't None, then make this entire batch of requests with one connection
     # and then the connection to be changed on the next request
     if reset_tor != 0:
-        _GlobalVars.Tor_Reconnect = [0, reset_tor]
+        _TorRotation.Tor_Reconnect = [0, reset_tor]
     
 
 def head(url:str, **kwargs):
@@ -358,16 +359,16 @@ def rotate_tor(num_req_per_rotation=None):
     if not Tor.tor_status():
         Tor.start_tor()
     if num_req_per_rotation is None or num_req_per_rotation < 1:
-        _GlobalVars.Tor_Reconnect = None
-    _GlobalVars.Tor_Reconnect = [num_req_per_rotation, num_req_per_rotation]
+        _TorRotation.Tor_Reconnect = None
+    _TorRotation.Tor_Reconnect = [num_req_per_rotation, num_req_per_rotation]
 
 def end_rotate_tor():
-    _GlobalVars.Tor_Reconnect = None
+    _TorRotation.Tor_Reconnect = None
 
 def warn_settings(warn:bool):
     if not isinstance(warn, bool):
         raise TypeError("Argument 'warn' bust be a bool")
-    _GlobalVars.warning_settings = warn
+    _TorRotation.warning_settings = warn
 
 def scan_ip(ip:str, port:int=80, timeout:int=1) -> bool:
     """
@@ -396,7 +397,7 @@ def scan_ip(ip:str, port:int=80, timeout:int=1) -> bool:
         raise ValueError("Argument 'ip' must be in the format 10.0.0.3")
 
     if Tor.tor_status():
-        _GlobalVars.raiseWarning("TorNotUtilizedWarning: Note that the tor network will not be usd when scanning ips")
+        _Warning.raiseWarning("TorNotUtilizedWarning: Note that the tor network will not be usd when scanning ips")
 
     try:
         session = _socket.socket(_socket.AF_INET, _socket.SOCK_STREAM)
@@ -440,12 +441,15 @@ def scan_iprange(ips:str, port:int=80, timeout:int=1) -> list:
     start, end = ips.split('.')[-1].split('-')
     ip_range = [first_three + str(i) for i in range (int(start), int(end)+1)]
 
-    if start >= 255:
+    if int(start) >= 255:
         raise ValueError('Ip range must start below 255.')
 
     if Tor.tor_status():
-        _GlobalVars.raiseWarning("TorNotUtilizedWarning: Note that the tor network will not be usd when scanning ips")
+        _Warning.raiseWarning("TorNotUtilizedWarning: Note that the tor network will not be usd when scanning ips")
 
+    reset_warn = _Warning.warning_settings
+    _Warning.warning_settings = False # stifle warnings while threading
+    
     threads = []
     res = {i:False for i in ip_range}
     for i in ip_range:
@@ -457,6 +461,9 @@ def scan_iprange(ips:str, port:int=80, timeout:int=1) -> list:
     for i in threads:
         i.join()
     
+    _Warning.warning_settings = reset_warn
+
+    
     return [key for key, value, in res.items() if value]
 
 # Helper function for get_async
@@ -465,7 +472,7 @@ def __grab_thread_wrapper(url:str, payload:dict, args, kwargs, retries=5, enable
         res = get(url, retries=retries, enable_js=enable_js, *args, **kwargs)
         payload[url] = res
     except _requests.exceptions.RequestException as err:
-        print(f"Warning: Failed to grab {url} | {err}\n")
+        _Warning.raiseWarning(f"Warning: Failed to grab {url} | {err}\n")
 
 # Helper function for scan_iprange
 def __scan_ip_wrapper(ip, port, timeout, res):
@@ -497,12 +504,12 @@ async def __grab_enable_js_async(url):
 
 def __handle_tor_rotations():
     # Handles rotating tor connections
-    if _GlobalVars.Tor_Reconnect is not None:
-        if _GlobalVars.Tor_Reconnect[0] <= 0:
+    if _TorRotation.Tor_Reconnect is not None:
+        if _TorRotation.Tor_Reconnect[0] <= 0:
             Tor.start_tor()
-            _GlobalVars.Tor_Reconnect[0] = _GlobalVars.Tor_Reconnect[1] - 1
+            _TorRotation.Tor_Reconnect[0] = _TorRotation.Tor_Reconnect[1] - 1
         else:
-                _GlobalVars.Tor_Reconnect[0] -= 1
+                _TorRotation.Tor_Reconnect[0] -= 1
 
 def __append_tor_kwargs(kwargs):
     if Tor.tor_status():
@@ -510,7 +517,7 @@ def __append_tor_kwargs(kwargs):
         if 'proxies' not in kwargs.keys():
             kwargs['proxies'] = Tor.tor_proxies
         else:
-            _GlobalVars.raiseWarning("ProxyWarning: Using specified proxy over Tor Network.")
+            _Warning.raiseWarning("ProxyWarning: Using specified proxy over Tor Network.")
         
         if 'headers' not in kwargs.keys():
             kwargs['headers'] = Tor.tor_headers
