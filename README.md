@@ -8,7 +8,7 @@ PyGrab is a Python library for making HTTP requests. It is designed to be fully 
 - **Flexible**: Whether you need to make a simple GET request, post data to a server, or download a file, PyGrab has you covered.
 - **Asynchronous Support**: PyGrab includes functions for making asynchronous HTTP requests, allowing you to efficiently grab data from multiple URLs at once.
 - **JavaScript Support**: PyGrab can render JavaScript-enabled websites, allowing you to grab data from dynamic web pages.
-- **Proxy Support**: PyGrab includes built-in support for using proxy servers, including a function for setting your own proxies.
+- **Interface with Tor Network**: PyGrab includes built-in support for routing requests through the tor network.
 
 ## Installation
 
