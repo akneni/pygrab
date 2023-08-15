@@ -9,6 +9,7 @@ class Tor():
     __tor_service_enabled = False
     __tor_path = None
     __tor_process = None
+    __override_service_err = False
     tor_proxies = {
         'http': 'socks5h://127.0.0.1:9050',
         'https': 'socks5h://127.0.0.1:9050'
@@ -21,19 +22,22 @@ class Tor():
     }
 
     @classmethod
-    def start_tor(cls, verbose:int=0):
+    def start_tor(cls, verbose:int=0, force_start=False):
         if cls.__tor_service_enabled:
             cls.end_tor()
 
-        cls.__tor_path_init()  
-        if 'tor' not in _os.listdir(cls.__tor_path):
+        cls.__tor_path_init()
+
+        if 'tor' not in _os.listdir(cls.__tor_path) or 'tor.exe' not in _os.listdir(_os.path.join(cls.__tor_path, './tor')):
             error_msg = "It seems like you're missing the tor.exe dependency. You can download it from 'https://www.torproject.org/download/tor/'.\n"
             error_msg += "Then call pygrab.Tor.load_tor_dependencies(./path/to/tor-something-something.tar.gz)"
-            raise FileNotFoundError (error_msg)
-        elif 'tor.exe' not in _os.listdir(_os.path.join(cls.__tor_path, './tor')):
-            error_msg = "It seems like you're missing the tor.exe dependency. You can download it from 'https://www.torproject.org/download/tor/'.\n"
-            error_msg += "Then call pygrab.Tor.load_tor_dependencies(./path/to/tor-something-something.tar.gz)"
-            raise FileNotFoundError (error_msg)
+            print(f'FileNotFoundError: {error_msg}\n')
+            dependency_filepath = input('OR, enter the file path here: ').strip(" '\"\n")
+            if not _os.path.isfile(dependency_filepath):
+                raise Exception("Invalid filepath")
+            else:
+                cls.load_tor_dependencies(dependency_filepath)
+                print("Sucessfully loaded tor dependencies\nStarting tor service...")
         
         cls.__tor_process = _subprocess.Popen(
             [_os.path.join(cls.__tor_path, './tor/tor.exe')], 
@@ -52,6 +56,14 @@ class Tor():
                 if verbose >=1 : print("Connected to Tor Service\n")
                 cls.__tor_service_enabled = True
                 break
+            elif "Could not bind to 127.0.0.1:9050" in line:
+                cls.__override_service_err = (force_start or cls.__override_service_err)
+                if cls.__override_service_err:
+                    cls.__tor_service_enabled = True
+                    break
+                err_msg = "A service is already running on 127.0.0.1:9050. Do you already have an instance of Tor Running?\n"
+                err_msg += "If another instance of tor is running, you can run pygrab.Tor.start_tor(force_start=True) to override this error."
+                raise ResourceWarning (err_msg)
 
 
     @classmethod
@@ -62,8 +74,12 @@ class Tor():
             cls.__tor_service_enabled = False
 
     @classmethod
-    def get_status(cls) -> bool:
+    def tor_status(cls) -> bool:
         return cls.__tor_service_enabled
+    
+    @classmethod
+    def override_status(cls) -> bool:
+        return cls.__override_service_err
     
     @classmethod
     def load_tor_dependencies(cls, filepath:str):
@@ -71,6 +87,7 @@ class Tor():
         if filepath.endswith('.tar.gz'):
             with _tarfile.open(filepath, 'r:gz') as tar:
                 tar.extractall(path=cls.__tor_path)
+            return
         elif filepath.endswith('tor.exe'):
             if 'tor' not in _os.listdir(cls.__tor_path):
                 _os.mkdir(_os.path.join(cls.__tor_path, "./tor"))
@@ -78,6 +95,8 @@ class Tor():
                 data = f.read()
             with open (_os.path.join(cls.__tor_path, "./tor/tor.exe"), 'wb') as f:
                 f.write(data)
+            return
+        raise AttributeError("load_tor_dependencies only supports file types of '.tar.gz' and 'tor.exe'")
 
     @classmethod
     def __tor_path_init(cls):

@@ -11,8 +11,9 @@ Javascript-enabled sites, and local requests.
 """
 
 
-from .tor import Tor
-from requests import Session
+from tor import Tor
+from session import Session
+from global_vars import GlobalVars as _GlobalVars
 import requests as _requests
 from pyppeteer import launch as _launch
 import asyncio as _asyncio
@@ -49,7 +50,11 @@ def get(url: str, retries=5, enable_js=False, *args, **kwargs):
     url_file_starts = ['http', 'ftp:', 'mailto:']
     if any([url.startswith(i) for i in local_file_starts]):
         raise ValueError ("Url must start with http. use get_local() for local requests.")
-    elif any([url.startswith(i) for i in url_file_starts]):        
+    elif any([url.startswith(i) for i in url_file_starts]):
+        # Handles rotating tor connections
+        __handle_tor_rotations()
+        
+        # Handle Js enables requests
         if enable_js:
             try:
                 res = __grab_enable_js(url)
@@ -72,15 +77,9 @@ def get(url: str, retries=5, enable_js=False, *args, **kwargs):
             session.mount('http://', adapter)
             session.mount('https://', adapter)
 
-            if Tor.get_status():
-                if 'proxies' in kwargs.keys():
-                    raise ValueError ("Cannot specify 'proxies' parameter while using tor.")
-                elif 'headers' in kwargs.keys():
-                    raise ValueError ("Cannot specify 'headers' parameter while using tor.")
-            
-                return session.get(url, headers=Tor.tor_headers, proxies=Tor.tor_proxies, *args, **kwargs)
-            else:
-                return session.get(url, *args, **kwargs)
+            __append_tor_kwargs(kwargs)
+            return session.get(url, *args, **kwargs)
+
     raise Exception(f"Invalid url: {url}")
     
 def get_async(urls:list, retries=5, enable_js=False, thread_limit=800, time_rest=0, *args, **kwargs) -> dict:
@@ -120,10 +119,13 @@ def get_async(urls:list, retries=5, enable_js=False, thread_limit=800, time_rest
         # remove repeats to prevent possible DoS attacks
         urls = list(set(urls))
 
+    # If tor rotations isn't None, then make this entire batch of requests with one connection
+    # and then the connection to be changed on the next request
+    reset_tor = 0 if _GlobalVars.Tor_Reconnect is None else _GlobalVars.Tor_Reconnect[1]
+    _GlobalVars.Tor_Reconnect = None
 
     result = {}
     thread_counter = 0
-
     while thread_counter < len(urls):
         sub_urls = urls[thread_counter:thread_counter+thread_limit]
         threads = []
@@ -135,6 +137,11 @@ def get_async(urls:list, retries=5, enable_js=False, thread_limit=800, time_rest
         for thread in threads:
             thread.join()
         thread_counter += thread_limit
+
+    # If tor rotations isn't None, then make this entire batch of requests with one connection
+    # and then the connection to be changed on the next request
+    if reset_tor != 0:
+        _GlobalVars.Tor_Reconnect = [0, reset_tor]
         
     return result
 
@@ -205,8 +212,10 @@ def download(url: str, local_filename:str=None, retries=5) -> None:
         local_filename = url.split('/')[-1]
     else:
         local_filename=url
-        
+    
+    # No need to handle tor roations here as it's already handled in get()
 
+    # sends a request to get the file contents
     response = get(url, retries=retries)
 
     if response.status_code == 200:
@@ -255,6 +264,11 @@ def download_async(urls:list, local_filename:list=None, retries=5, thread_limit=
     else:
         local_filename = [None for _ in range(len(urls))]
 
+    # If tor rotations isn't None, then make this entire batch of requests with one connection
+    # and then the connection to be changed on the next request
+    reset_tor = 0 if _GlobalVars.Tor_Reconnect is None else _GlobalVars.Tor_Reconnect[1]
+    _GlobalVars.Tor_Reconnect = None
+
     # Uses the threading module to asynchrounously download the files
     thread_counter = 0
     while (thread_counter < len(urls)):
@@ -270,17 +284,25 @@ def download_async(urls:list, local_filename:list=None, retries=5, thread_limit=
         for thread in threads:
             thread.join()
         thread_counter += thread_limit
+
+    # If tor rotations isn't None, then make this entire batch of requests with one connection
+    # and then the connection to be changed on the next request
+    if reset_tor != 0:
+        _GlobalVars.Tor_Reconnect = [0, reset_tor]
     
 
-def head(url, **kwargs):
+def head(url:str, **kwargs):
+    __append_tor_kwargs(kwargs)
     return _requests.head(url, **kwargs)
 
 def post(url:str, data=None, json=None, **kwargs):
     local_file_starts = ['./', 'C:', '/'] 
     if any([url.startswith(i) for i in local_file_starts]):
         raise ValueError("use post_local() for creation of local files.")
-        
+    
+    __append_tor_kwargs(kwargs)
     return _requests.post(url, data=data, json=json, **kwargs)
+
 
 def post_local(filepath:str, data:str, local_save_type:str="w", encoding:str='utf-8') -> None:
     """
@@ -301,20 +323,27 @@ def post_local(filepath:str, data:str, local_save_type:str="w", encoding:str='ut
         f.write(str(data))
 
 def put(url, data=None, **kwargs):
+    __append_tor_kwargs(kwargs)
     return _requests.put(url, data=data, **kwargs)
 
 def patch(url, data=None, **kwargs):
+    __append_tor_kwargs(kwargs)
     return _requests.patch(url, data=data, **kwargs)
 
 def delete(url, **kwargs):
+    __append_tor_kwargs(kwargs)
     return _requests.delete(url, **kwargs)
 
 def options(url, **kwargs):
+    __append_tor_kwargs(kwargs)
     return _requests.options(url, **kwargs)
 
-def tor_status():
+def tor_status() -> bool:
+    return Tor.tor_status()
+
+def display_tor_status() -> None:
     connection_data = get('http://ip-api.com/json').json()
-    print("Tor Service Enabled:  ", Tor.get_status())
+    print("Tor Service Enabled:  ", Tor.tor_status())
     print("Public Ip Address:    ", connection_data['query'])
     if 'country' in connection_data.keys():
         print("Country:              ", connection_data['country'])
@@ -322,7 +351,24 @@ def tor_status():
         print("Region:               ", connection_data['regionName'])
     if 'city' in connection_data.keys():
         print("City:                 ", connection_data['city'])
-    
+
+def rotate_tor(num_req_per_rotation=None):
+    if Tor.override_status():
+        raise Exception("Cannot rotate tor connections when an override is forced. End the other tor service in order to rotate connections.")
+    if not Tor.tor_status():
+        Tor.start_tor()
+    if num_req_per_rotation is None or num_req_per_rotation < 1:
+        _GlobalVars.Tor_Reconnect = None
+    _GlobalVars.Tor_Reconnect = [num_req_per_rotation, num_req_per_rotation]
+
+def end_rotate_tor():
+    _GlobalVars.Tor_Reconnect = None
+
+def warn_settings(warn:bool):
+    if not isinstance(warn, bool):
+        raise TypeError("Argument 'warn' bust be a bool")
+    _GlobalVars.warning_settings = warn
+
 def scan_ip(ip:str, port:int=80, timeout:int=1) -> bool:
     """
     Scans a given IP address to check if it's online.
@@ -348,6 +394,9 @@ def scan_ip(ip:str, port:int=80, timeout:int=1) -> bool:
     pattern = r'^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$'
     if not _re.match(pattern, ip):
         raise ValueError("Argument 'ip' must be in the format 10.0.0.3")
+
+    if Tor.tor_status():
+        _GlobalVars.raiseWarning("TorNotUtilizedWarning: Note that the tor network will not be usd when scanning ips")
 
     try:
         session = _socket.socket(_socket.AF_INET, _socket.SOCK_STREAM)
@@ -378,7 +427,6 @@ def scan_iprange(ips:str, port:int=80, timeout:int=1) -> list:
         TypeError: If the 'ips' argument is not a string.
         ValueError: If the 'ips' argument is not in the correct format or if the IP range start is greater or equal to 255.
     """
-    import threading as _threading
 
     if not isinstance(ips, str):
         raise TypeError("Argument 'ips' must be a string.")
@@ -395,9 +443,11 @@ def scan_iprange(ips:str, port:int=80, timeout:int=1) -> list:
     if start >= 255:
         raise ValueError('Ip range must start below 255.')
 
+    if Tor.tor_status():
+        _GlobalVars.raiseWarning("TorNotUtilizedWarning: Note that the tor network will not be usd when scanning ips")
+
     threads = []
     res = {i:False for i in ip_range}
-
     for i in ip_range:
         threads.append(
             _threading.Thread(target=__scan_ip_wrapper, args=[i, port, timeout, res])
@@ -430,17 +480,41 @@ def __grab_enable_js(url):
 
 # helper funtion for JS enables requests
 async def __grab_enable_js_async(url):
-    if Tor.get_status():
+    if Tor.tor_status():
         proxy = Tor.tor_proxies['http'].replace('socks5h', 'socks5')
         browser = await _launch(args=['--proxy-server=' + proxy])
     else:
         browser = await _launch()
     
     page = await browser.newPage()
-    if Tor.get_status():
+    if Tor.tor_status():
         await page.setExtraHTTPHeaders(Tor.tor_headers)
 
     await page.goto(url, waitUntil='networkidle0')
     html = await page.content()    
     await browser.close()
     return html
+
+def __handle_tor_rotations():
+    # Handles rotating tor connections
+    if _GlobalVars.Tor_Reconnect is not None:
+        if _GlobalVars.Tor_Reconnect[0] <= 0:
+            Tor.start_tor()
+            _GlobalVars.Tor_Reconnect[0] = _GlobalVars.Tor_Reconnect[1] - 1
+        else:
+                _GlobalVars.Tor_Reconnect[0] -= 1
+
+def __append_tor_kwargs(kwargs):
+    if Tor.tor_status():
+        # Defaults to user specified proxies and headers over those defined by the tor interface
+        if 'proxies' not in kwargs.keys():
+            kwargs['proxies'] = Tor.tor_proxies
+        else:
+            _GlobalVars.raiseWarning("ProxyWarning: Using specified proxy over Tor Network.")
+        
+        if 'headers' not in kwargs.keys():
+            kwargs['headers'] = Tor.tor_headers
+        else:
+            for key, val in Tor.tor_headers.items():
+                if key not in kwargs['headers']:
+                    kwargs['headers'][key] = val
