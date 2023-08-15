@@ -19,7 +19,7 @@ import asyncio as _asyncio
 import time as _time
 import socket as _socket
 import re as _re
-
+import threading as _threading
 
 def get(url: str, retries=5, enable_js=False, *args, **kwargs): 
     """
@@ -83,7 +83,7 @@ def get(url: str, retries=5, enable_js=False, *args, **kwargs):
                 return session.get(url, *args, **kwargs)
     raise Exception(f"Invalid url: {url}")
     
-def get_async(urls, retries=5, enable_js=False, thread_limit=800, time_rest=0, *args, **kwargs) -> list:
+def get_async(urls:list, retries=5, enable_js=False, thread_limit=800, time_rest=0, *args, **kwargs) -> dict:
     """
     Gets multiple URLs asynchronously.
 
@@ -114,12 +114,14 @@ def get_async(urls, retries=5, enable_js=False, thread_limit=800, time_rest=0, *
     elif not (isinstance(time_rest, int) or isinstance(time_rest, float)):
         raise TypeError("Argument 'time_rest' must be a int or float")
 
-    import threading as _threading # only import if async functionality is needed
     if type(urls) == str:
         return [get(urls, retries=retries, enable_js=enable_js, *args, **kwargs)]
+    else:
+        # remove repeats to prevent possible DoS attacks
+        urls = list(set(urls))
 
 
-    result = []
+    result = {}
     thread_counter = 0
 
     while thread_counter < len(urls):
@@ -234,6 +236,7 @@ def download_async(urls:list, local_filename:list=None, retries=5, thread_limit=
         ValueError: If 'local_filename' is specified but does not match the length of 'urls' or if a URL does not contain a file extension.
         ValueError: If a 'local_filename' is specified but does not contain a file extension.
     """
+    # Check argument types
     if (isinstance(urls, (str, int, float, bool))):
         raise TypeError("Argument 'urls' must be an iterable object")
     elif (isinstance(local_filename, (str, int, float, bool)) or local_filename is None):
@@ -243,6 +246,8 @@ def download_async(urls:list, local_filename:list=None, retries=5, thread_limit=
     elif not (isinstance(time_rest, int) or isinstance(time_rest, float)):
         raise TypeError("Argument 'time_rest' must be a int or float")
 
+    # remove repeats to prevent possible DoS attacks
+    urls = list(set(urls))
 
     if local_filename is not None:
         if len(urls) != len(local_filename):
@@ -250,9 +255,7 @@ def download_async(urls:list, local_filename:list=None, retries=5, thread_limit=
     else:
         local_filename = [None for _ in range(len(urls))]
 
-    # only import if async functionality is needed
-    import threading as _threading
-
+    # Uses the threading module to asynchrounously download the files
     thread_counter = 0
     while (thread_counter < len(urls)):
         threads = []
@@ -406,22 +409,26 @@ def scan_iprange(ips:str, port:int=80, timeout:int=1) -> list:
     
     return [key for key, value, in res.items() if value]
 
-def __grab_thread_wrapper(url:str, payload:list, args, kwargs, retries=5, enable_js=False):
+# Helper function for get_async
+def __grab_thread_wrapper(url:str, payload:dict, args, kwargs, retries=5, enable_js=False):
     try:
         res = get(url, retries=retries, enable_js=enable_js, *args, **kwargs)
-        payload.append(res)
+        payload[url] = res
     except _requests.exceptions.RequestException as err:
         print(f"Warning: Failed to grab {url} | {err}\n")
 
+# Helper function for scan_iprange
 def __scan_ip_wrapper(ip, port, timeout, res):
     try:
         res[ip] = scan_ip(ip=ip, port=port, timeout=timeout)
     except ValueError:
         pass
 
+# helper funtion for JS enables requests
 def __grab_enable_js(url):
     return _asyncio.get_event_loop().run_until_complete(__grab_enable_js_async(url))
 
+# helper funtion for JS enables requests
 async def __grab_enable_js_async(url):
     if Tor.get_status():
         proxy = Tor.tor_proxies['http'].replace('socks5h', 'socks5')
