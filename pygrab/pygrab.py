@@ -356,12 +356,12 @@ def display_tor_status() -> None:
     if 'city' in connection_data.keys():
         print("City:                 ", connection_data['city'])
 
-def rotate_tor(num_req_per_rotation=None):
+def rotate_tor(num_req_per_rotation):
     if Tor.override_status():
         raise Exception("Cannot rotate tor connections when an override is forced. End the other tor service in order to rotate connections.")
     if not Tor.tor_status():
         Tor.start_tor()
-    if num_req_per_rotation is None or num_req_per_rotation < 1:
+    if num_req_per_rotation < 1:
         _TorRotation.Tor_Reconnect = None
     _TorRotation.Tor_Reconnect = [num_req_per_rotation, num_req_per_rotation]
 
