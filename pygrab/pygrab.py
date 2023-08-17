@@ -11,10 +11,12 @@ Javascript-enabled sites, and local requests.
 """
 
 
-from tor import Tor
-from session import Session
-from warning import Warning as _Warning
-from tor_rotation import TorRotation as _TorRotation
+from .tor import Tor
+from .session import Session
+from requests import Request
+from requests import Response
+from .warning import Warning as _Warning
+from .tor_rotation import TorRotation as _TorRotation
 import requests as _requests
 from pyppeteer import launch as _launch
 import asyncio as _asyncio
@@ -22,6 +24,8 @@ import time as _time
 import socket as _socket
 import re as _re
 import threading as _threading
+import nest_asyncio as _nest_asyncio
+
 
 def get(url: str, retries=5, enable_js=False, *args, **kwargs): 
     """
@@ -58,17 +62,19 @@ def get(url: str, retries=5, enable_js=False, *args, **kwargs):
         # Handle Js enables requests
         if enable_js:
             try:
-                res = __grab_enable_js(url)
+                res = __grab_enable_js(url, kwargs)
             except RuntimeError as err:
                 if "This event loop is already running" in str(err):
-                    raise RuntimeError("enable_js=True unsupported in jupiter environment.")
+                    # if this occurs, the runtime us a jupiter notebook
+                    _nest_asyncio.apply()
+                    res = __grab_enable_js(url, kwargs)
                 else:
                     raise RuntimeError(err)
             
             resp = _requests.models.Response()
             resp.status_code = 200
-            resp.headers = {'header_key': 'NaN'}  # replace with your actual headers
-            resp._content = str(res).encode("utf-8")  # replace with your actual HTML content
+            resp.headers = {'header_key': 'NaN'}
+            resp._content = str(res).encode("utf-8")
             resp.request = _requests.models.PreparedRequest()
             return resp
         else:
@@ -200,11 +206,7 @@ def download(url: str, local_filename:str=None, retries=5) -> None:
     elif not (isinstance(local_filename, str) or local_filename is None):
         raise TypeError("Argument 'local_filename' must be a str")
     elif not (isinstance(retries, int)):
-        raise TypeError("Argument 'retries' must be a int")
-    
-    if '.' not in url:
-        raise ValueError("Argument 'url' needs a filepath extention")
-    
+        raise TypeError("Argument 'retries' must be a int")    
 
     if local_filename is not None:
         if '.' not in local_filename:
@@ -225,7 +227,7 @@ def download(url: str, local_filename:str=None, retries=5) -> None:
     else:
         raise Exception(f"Error fetching url. Status code - {response.status_code}")
 
-def download_async(urls:list, local_filename:list=None, retries=5, thread_limit=500, time_rest=0) -> None:
+def download_async(urls:list, local_filenames:list=None, retries=5, thread_limit=500, time_rest=0) -> None:
     """
     Executes multiple file downloads asynchronously from a list of given URLs and saves them locally.
 
@@ -249,7 +251,7 @@ def download_async(urls:list, local_filename:list=None, retries=5, thread_limit=
     # Check argument types
     if (isinstance(urls, (str, int, float, bool))):
         raise TypeError("Argument 'urls' must be an iterable object")
-    elif (isinstance(local_filename, (str, int, float, bool)) or local_filename is None):
+    elif (isinstance(local_filenames, (str, int, float, bool)) or local_filenames is None):
         raise TypeError("Argument 'local_filename' must be an iterable object")
     elif not (isinstance(retries, int)):
         raise TypeError("Argument 'retries' must be a int")
@@ -258,12 +260,13 @@ def download_async(urls:list, local_filename:list=None, retries=5, thread_limit=
 
     # remove repeats to prevent possible DoS attacks
     urls = list(set(urls))
+    local_filenames = list(set(local_filenames))
 
-    if local_filename is not None:
-        if len(urls) != len(local_filename):
-            raise ValueError("Lists 'url' and 'name' must be of equal length.")
+    if local_filenames is not None:
+        if len(urls) != len(local_filenames):
+            raise ValueError("Lists 'url' and 'local_filenames' must be of equal length.")
     else:
-        local_filename = [None for _ in range(len(urls))]
+        local_filenames = [None for _ in range(len(urls))]
 
     # If tor rotations isn't None, then make this entire batch of requests with one connection
     # and then the connection to be changed on the next request
@@ -275,7 +278,7 @@ def download_async(urls:list, local_filename:list=None, retries=5, thread_limit=
     while (thread_counter < len(urls)):
         threads = []
         sub_urls = urls[thread_counter:thread_counter+thread_limit]
-        sub_local_filename= local_filename[thread_counter:thread_counter+thread_limit]
+        sub_local_filename= local_filenames[thread_counter:thread_counter+thread_limit]
 
         for url, name in zip(sub_urls, sub_local_filename):
             threads.append(_threading.Thread(target=download, args=[url, name, retries]))
@@ -482,20 +485,30 @@ def __scan_ip_wrapper(ip, port, timeout, res):
         pass
 
 # helper funtion for JS enables requests
-def __grab_enable_js(url):
-    return _asyncio.get_event_loop().run_until_complete(__grab_enable_js_async(url))
+def __grab_enable_js(url, kwargs):
+    return _asyncio.get_event_loop().run_until_complete(__grab_enable_js_async(url, kwargs))
 
 # helper funtion for JS enables requests
-async def __grab_enable_js_async(url):
+async def __grab_enable_js_async(url, kwargs):
     if Tor.tor_status():
-        proxy = Tor.tor_proxies['http'].replace('socks5h', 'socks5')
+        if 'proxies' in kwargs.keys():
+            proxy = kwargs['proxies']['http']
+        else:
+            proxy = Tor.tor_proxies['http'].replace('socks5h', 'socks5')
         browser = await _launch(args=['--proxy-server=' + proxy])
     else:
         browser = await _launch()
     
     page = await browser.newPage()
+
+    # Merges headers parameter passed by the user to tor headers
+    if 'headers' not in kwargs.keys():
+        kwargs['headers'] = {}
     if Tor.tor_status():
-        await page.setExtraHTTPHeaders(Tor.tor_headers)
+        for key, val in Tor.tor_headers.items():
+            if key not in kwargs['headers']:
+                kwargs['headers'][key] = val
+    await page.setExtraHTTPHeaders(kwargs['headers'])
 
     await page.goto(url, waitUntil='networkidle0')
     html = await page.content()    
@@ -509,15 +522,13 @@ def __handle_tor_rotations():
             Tor.start_tor()
             _TorRotation.Tor_Reconnect[0] = _TorRotation.Tor_Reconnect[1] - 1
         else:
-                _TorRotation.Tor_Reconnect[0] -= 1
+            _TorRotation.Tor_Reconnect[0] -= 1
 
 def __append_tor_kwargs(kwargs):
     if Tor.tor_status():
         # Defaults to user specified proxies and headers over those defined by the tor interface
         if 'proxies' not in kwargs.keys():
             kwargs['proxies'] = Tor.tor_proxies
-        else:
-            _Warning.raiseWarning("ProxyWarning: Using specified proxy over Tor Network.")
         
         if 'headers' not in kwargs.keys():
             kwargs['headers'] = Tor.tor_headers

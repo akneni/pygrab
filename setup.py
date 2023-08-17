@@ -7,8 +7,8 @@ with open(path.join(this_directory, 'README.md'), encoding='utf-8') as f:
 
 setup(
     name='pygrab',
-    version='2.0.4',
-    description='A secure python library for fetching data with async support',
+    version='2.0.5',
+    description='A secure python library for fetching data with async, JS, and Tor support',
     long_description=long_description,
     long_description_content_type='text/markdown',
     author='Anish Kanthamneni',
@@ -17,5 +17,6 @@ setup(
     install_requires=[
         'requests',
         'pyppeteer',
+        'nest_asyncio',
     ],
 )
