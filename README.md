@@ -2,6 +2,13 @@
 
 PyGrab is a Python library for making HTTP requests. It is designed to be fully interoperable with the popular `requests` package in Python. All functions in PyGrab that make HTTP requests return `requests.Response` objects, making it easy to integrate into existing projects that use `requests`.
 
+
+## References
+- **[GitHub Repo](https://github.com/akneni/pygrab)**
+- **[PyPi Page](https://pypi.org/project/pygrab/)**
+- **[Documentation](https://hackmd.io/@akneni/HJCVdU3h3)**
+
+
 ## Features
 
 - **Simple**: PyGrab's API is designed to be straightforward and easy to use. If you're familiar with `requests`, you'll feel right at home.
@@ -19,11 +26,6 @@ You can install PyGrab using pip:
 ```bash
 pip install pygrab
 ```
-
-## References
-- **[GitHub Repo](https://github.com/akneni/pygrab)**
-- **[PyPi Page](https://pypi.org/project/pygrab/)**
-- **[Documentation](https://hackmd.io/@akneni/HJCVdU3h3)**
 
 ## Usage
 
