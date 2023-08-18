@@ -106,7 +106,7 @@ def get_async(urls:list, retries=5, enable_js=False, thread_limit=800, time_rest
         **kwargs: Arbitrary keyword arguments to pass to the get function.
 
     Returns:
-        list: A list of responses from the grabbed URLs.
+        disc: A dictionary of responses with the grabbed URLs as keys and their respective responses as values.
     
     Raises:
         TypeError: If any of the arguments are not of the desired data type.
@@ -198,7 +198,6 @@ def download(url: str, local_filename:str=None, retries=5) -> None:
 
     Raises:
         TypeError: If any of the arguments are not of the desired data type.
-        ValueError: If 'url' does not contain a file extension or if there was an error fetching the URL.
         ValueError: If 'local_filename' is specified but does not contain a file extension.
     """
     if not (isinstance(url, str)):
@@ -245,8 +244,7 @@ def download_async(urls:list, local_filenames:list=None, retries=5, thread_limit
 
     Raises:
         TypeError: If any of the arguments are not of the desired data type.
-        ValueError: If 'local_filename' is specified but does not match the length of 'urls' or if a URL does not contain a file extension.
-        ValueError: If a 'local_filename' is specified but does not contain a file extension.
+        ValueError: If a 'local_filenames' is specified but does not contain a file extension.
     """
     # Check argument types
     if (isinstance(urls, (str, int, float, bool))):
