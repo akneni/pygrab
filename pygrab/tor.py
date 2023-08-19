@@ -5,12 +5,14 @@ import signal as _signal
 import tarfile as _tarfile
 from pathlib import Path as _Path
 import platform as _platform
+from .exceptions import *
 
 class Tor():
     __tor_service_enabled = False
     __tor_path = None
     __tor_process = None
     __override_service_err = False
+    __os = _platform.system()
     tor_proxies = {
         'http': 'socks5h://127.0.0.1:9050',
         'https': 'socks5h://127.0.0.1:9050'
@@ -29,18 +31,22 @@ class Tor():
 
         cls.__tor_path_init()
 
-        if 'tor' not in _os.listdir(cls.__tor_path) or 'tor.exe' not in _os.listdir(_os.path.join(cls.__tor_path, './tor')):
-            error_msg = "It seems like you're missing the tor.exe dependency. You can download it from 'https://www.torproject.org/download/tor/'.\n"
-            error_msg += "Then call pygrab.Tor.load_tor_dependencies(./path/to/tor-something-something.tar.gz)"
-            print(f'FileNotFoundError: {error_msg}\n')
-            dependency_filepath = input('OR, enter the file path here: ').strip(" '\"\n")
-            if not _os.path.isfile(dependency_filepath):
-                raise Exception("Invalid filepath")
-            else:
-                cls.load_tor_dependencies(dependency_filepath)
-                print("Sucessfully loaded tor dependencies\nStarting tor service...")
+        if cls.__os == 'Windows':
+            if 'tor' not in _os.listdir(cls.__tor_path) or 'tor.exe' not in _os.listdir(_os.path.join(cls.__tor_path, './tor')):
+                error_msg = "It seems like you're missing the tor.exe dependency. You can download it from 'https://www.torproject.org/download/tor/'.\n"
+                error_msg += "Then call pygrab.Tor.load_tor_dependencies(./path/to/tor-something-or-the-other.tar.gz)"
+                print(f'FileNotFoundError: {error_msg}\n')
+                dependency_filepath = input('OR, enter the file path here: ').strip(" '\"\n")
+                if not _os.path.isfile(dependency_filepath):
+                    raise Exception("Invalid filepath")
+                else:
+                    cls.load_tor_dependencies(dependency_filepath)
+                    print("Sucessfully loaded tor dependencies\nStarting tor service...")
+        elif cls.__os == 'Linux':
+            if not cls.__tor_installed_linux():
+                raise DependencyLoadError("It seems like you're missing the tor dependency. Please run `sudo apt-get install tor` to download dependencies.")
         
-        if _platform.platform() == 'Windows':
+        if cls.__os == 'Windows':
             cls.__tor_process = _subprocess.Popen(
                 [_os.path.join(cls.__tor_path, './tor/tor.exe')], 
                 stdout=_subprocess.PIPE, 
@@ -49,7 +55,7 @@ class Tor():
             )
         else:
             cls.__tor_process = _subprocess.Popen(
-                [_os.path.join(cls.__tor_path, './tor/tor')], 
+                ['tor', '/tor'], 
                 stdout=_subprocess.PIPE, 
                 stderr=_subprocess.STDOUT, 
                 text=True
@@ -92,28 +98,23 @@ class Tor():
     
     @classmethod
     def load_tor_dependencies(cls, filepath:str):
-        if _platform.system() == 'Windows':
-            cls.__tor_path_init()        
-            if filepath.endswith('.tar.gz'):
-                with _tarfile.open(filepath, 'r:gz') as tar:
-                    tar.extractall(path=cls.__tor_path)
-                return
-            elif filepath.endswith('tor.exe'):
-                if 'tor' not in _os.listdir(cls.__tor_path):
-                    _os.mkdir(_os.path.join(cls.__tor_path, "./tor"))
-                with open(filepath, 'rb') as f:
-                    data = f.read()
-                with open (_os.path.join(cls.__tor_path, "./tor/tor.exe"), 'wb') as f:
-                    f.write(data)
-                return
-            raise AttributeError("load_tor_dependencies only supports file types of '.tar.gz' and 'tor.exe'")
-        else:
-            if filepath.endswith('.tar.gz'):
-                with _tarfile.open(filepath, 'r:gz') as tar:
-                    tar.extractall(path=cls.__tor_path)
-                return
-            raise AttributeError("load_tor_dependencies only supports file types of '.tar.gz'.")
+        if cls.__os == 'Linux':
+            raise DependencyLoadError(" If you're on linux, run `sudo apt-get` ")
 
+        cls.__tor_path_init()        
+        if filepath.endswith('.tar.gz'):
+            with _tarfile.open(filepath, 'r:gz') as tar:
+                tar.extractall(path=cls.__tor_path)
+            return
+        elif filepath.endswith('tor.exe'):
+            if 'tor' not in _os.listdir(cls.__tor_path):
+                _os.mkdir(_os.path.join(cls.__tor_path, "./tor"))
+            with open(filepath, 'rb') as f:
+                data = f.read()
+            with open (_os.path.join(cls.__tor_path, "./tor/tor.exe"), 'wb') as f:
+                f.write(data)
+            return
+        raise AttributeError("load_tor_dependencies only supports file types of '.tar.gz' and 'tor.exe'")
 
     @classmethod
     def __tor_path_init(cls):
@@ -122,6 +123,16 @@ class Tor():
             if "tor-dependencies" not in _os.listdir(tor_path):
                 _os.mkdir(_os.path.join(tor_path, "./tor-dependencies"))
             cls.__tor_path = _os.path.join(tor_path, "./tor-dependencies")
+
+    @classmethod
+    def __tor_installed_linux(cls):
+        try:
+            result = _subprocess.run(['tor', '--version'], stdout=_subprocess.PIPE, stderr=_subprocess.PIPE)
+            if result.returncode == 0:
+                return True
+        except FileNotFoundError:
+            pass
+        return False
 
     @classmethod
     def __signal_handler(cls, signum, frame):
