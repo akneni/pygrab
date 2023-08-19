@@ -15,7 +15,7 @@ from .tor import Tor
 from .session import Session
 from requests import Request
 from requests import Response
-from .warnings import Warning as _Warning
+from .warning import Warning as _Warning
 from .tor_rotation import TorRotation as _TorRotation
 import requests as _requests
 from pyppeteer import launch as _launch

@@ -2,7 +2,7 @@ import requests as _requests
 import threading as _threading
 from .tor import Tor as _Tor
 import time as _time
-from .warnings import Warning as _Warning
+from .warning import Warning as _Warning
 import asyncio as _asyncio
 from pyppeteer import launch as _launch
 import nest_asyncio as _nest_asyncio

@@ -13,10 +13,14 @@ class Tor():
     __tor_process = None
     __override_service_err = False
     __os = _platform.system()
+
+    # socks proxies for tor
     tor_proxies = {
         'http': 'socks5h://127.0.0.1:9050',
         'https': 'socks5h://127.0.0.1:9050'
     }
+
+    # Default headers to be usd when tor is enabled
     tor_headers = {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537',
         'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
@@ -31,7 +35,7 @@ class Tor():
 
         cls.__tor_path_init()
 
-        if cls.__os == 'Windows':
+        if cls.__os == 'Windows':# Check if tor dependencies are installed for windows
             if 'tor' not in _os.listdir(cls.__tor_path) or 'tor.exe' not in _os.listdir(_os.path.join(cls.__tor_path, './tor')):
                 error_msg = "It seems like you're missing the tor.exe dependency. You can download it from 'https://www.torproject.org/download/tor/'.\n"
                 error_msg += "Then call pygrab.Tor.load_tor_dependencies(./path/to/tor-something-or-the-other.tar.gz)"
@@ -43,6 +47,7 @@ class Tor():
                     cls.load_tor_dependencies(dependency_filepath)
                     print("Sucessfully loaded tor dependencies\nStarting tor service...")
         elif cls.__os == 'Linux':
+            # Check if tor dependencies are installed for linux
             if not cls.__tor_installed_linux():
                 raise DependencyLoadError("It seems like you're missing the tor dependency. Please run `sudo apt-get install tor` to download dependencies.")
         
@@ -61,6 +66,7 @@ class Tor():
                 text=True
             )
 
+        # Set the tor service to me termnated on program exit
         _atexit.register(cls.end_tor)
         _signal.signal(_signal.SIGTERM, cls.__signal_handler)
 
@@ -126,6 +132,7 @@ class Tor():
 
     @classmethod
     def __tor_installed_linux(cls):
+        # Determine if tor service is installed for linux
         try:
             result = _subprocess.run(['tor', '--version'], stdout=_subprocess.PIPE, stderr=_subprocess.PIPE)
             if result.returncode == 0:
