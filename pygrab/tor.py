@@ -4,6 +4,7 @@ import atexit as _atexit
 import signal as _signal
 import tarfile as _tarfile
 from pathlib import Path as _Path
+import platform as _platform
 
 class Tor():
     __tor_service_enabled = False
@@ -39,12 +40,20 @@ class Tor():
                 cls.load_tor_dependencies(dependency_filepath)
                 print("Sucessfully loaded tor dependencies\nStarting tor service...")
         
-        cls.__tor_process = _subprocess.Popen(
-            [_os.path.join(cls.__tor_path, './tor/tor.exe')], 
-            stdout=_subprocess.PIPE, 
-            stderr=_subprocess.STDOUT, 
-            text=True
-        )
+        if _platform.platform() == 'Windows':
+            cls.__tor_process = _subprocess.Popen(
+                [_os.path.join(cls.__tor_path, './tor/tor.exe')], 
+                stdout=_subprocess.PIPE, 
+                stderr=_subprocess.STDOUT, 
+                text=True
+            )
+        else:
+            cls.__tor_process = _subprocess.Popen(
+                [_os.path.join(cls.__tor_path, './tor/tor')], 
+                stdout=_subprocess.PIPE, 
+                stderr=_subprocess.STDOUT, 
+                text=True
+            )
 
         _atexit.register(cls.end_tor)
         _signal.signal(_signal.SIGTERM, cls.__signal_handler)
@@ -83,20 +92,28 @@ class Tor():
     
     @classmethod
     def load_tor_dependencies(cls, filepath:str):
-        cls.__tor_path_init()        
-        if filepath.endswith('.tar.gz'):
-            with _tarfile.open(filepath, 'r:gz') as tar:
-                tar.extractall(path=cls.__tor_path)
-            return
-        elif filepath.endswith('tor.exe'):
-            if 'tor' not in _os.listdir(cls.__tor_path):
-                _os.mkdir(_os.path.join(cls.__tor_path, "./tor"))
-            with open(filepath, 'rb') as f:
-                data = f.read()
-            with open (_os.path.join(cls.__tor_path, "./tor/tor.exe"), 'wb') as f:
-                f.write(data)
-            return
-        raise AttributeError("load_tor_dependencies only supports file types of '.tar.gz' and 'tor.exe'")
+        if _platform.system() == 'Windows':
+            cls.__tor_path_init()        
+            if filepath.endswith('.tar.gz'):
+                with _tarfile.open(filepath, 'r:gz') as tar:
+                    tar.extractall(path=cls.__tor_path)
+                return
+            elif filepath.endswith('tor.exe'):
+                if 'tor' not in _os.listdir(cls.__tor_path):
+                    _os.mkdir(_os.path.join(cls.__tor_path, "./tor"))
+                with open(filepath, 'rb') as f:
+                    data = f.read()
+                with open (_os.path.join(cls.__tor_path, "./tor/tor.exe"), 'wb') as f:
+                    f.write(data)
+                return
+            raise AttributeError("load_tor_dependencies only supports file types of '.tar.gz' and 'tor.exe'")
+        else:
+            if filepath.endswith('.tar.gz'):
+                with _tarfile.open(filepath, 'r:gz') as tar:
+                    tar.extractall(path=cls.__tor_path)
+                return
+            raise AttributeError("load_tor_dependencies only supports file types of '.tar.gz'.")
+
 
     @classmethod
     def __tor_path_init(cls):
