@@ -85,7 +85,12 @@ def get(url: str, retries=5, enable_js=False, *args, **kwargs):
             session.mount('https://', adapter)
 
             __append_tor_kwargs(kwargs)
-            return session.get(url, *args, **kwargs)
+            try:
+                return session.get(url, *args, **kwargs)
+            except _requests.exceptions.InvalidSchema as err:
+                if 'Missing dependencies for SOCKS support'.lower() in str(err).lower():
+                    raise ModuleNotFoundError("Required module 'PySocks' not found.")
+                raise _requests.exceptions.InvalidSchema(err)
 
     raise Exception(f"Invalid url: {url}")
     
