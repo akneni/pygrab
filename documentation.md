@@ -18,7 +18,7 @@ This module implements the primary developer interface for pygrab.
 ### `pygrab.get()`
 
 **Parameters**
-- `url` (str): The URL to get.
+- `url` (str): The URL or IP address to get.
 - `retries` (int, optional): The number of times to retry the request if it fails. Defaults to 5.
 - `enable_js` (bool, optional): Enable Javascript on the request. Defaults to False.
 - `*args`: Variable length argument list passed to requests.get.
@@ -32,10 +32,7 @@ This module implements the primary developer interface for pygrab.
 
 **Raises**
 - `TypeError`: If any of the arguments are not of the desired data type.
-- `ValueError`: If the URL doesn't start with http. Use `get_local()` for local requests.
-- `Exception`: If the URL is invalid.
-
-
+- `ValueError`: If the URL or IP address is invalid. Use `get_local()` for local requests.
 
 **Exceptions**
 - `RuntimeError`: If an error occurs during runtime, such as a connection error.
@@ -319,10 +316,10 @@ Starts the Tor network and configures all requests to be routed through the tor 
 **Returns**
 - `None`
 
-**Note**
+**Notes**
 - If `force_start` is set equal to True, then the program will crash if the service running on `127.0.0.1:9050` is not Tor.
 - Additionally, even if the service running on `127.0.0.1:9050` is Tor, some functionality may be lost (such as rotating tor connections). It is recommended to only have one instance of tor running at any one time.
-- If you get an error message stating that you are missing the tor.exe dependency, its probably because you are :). Download it from "https://www.torproject.org/download/tor/". Then copy the path to the `.tar.gz` file and enter it when prompted by pygrab.Tor.start_tor(). 
+- If you get an error message stating that you are missing the tor.exe dependency, its probably because you are :). If you're on Windows, download it from "https://www.torproject.org/download/tor/". Then copy the path to the `.tar.gz` file and enter it when prompted by pygrab.Tor.start_tor(). If you're on linux, simply run `sudo apt-get install tor`.
 
 
 <br />
@@ -387,6 +384,7 @@ Loads the `tor.exe` dependency from the `.tar.gz` file that is downloaded from "
 - `None`
 
 **Notes**
+- This function is for windows only. If you're on Linux, run `sudo apt-get install tor`
 - Running `pygrab.Tor.start_tor()` without the `tor.exe` dependency installed will prompt you for the path to the `.tar.gz` file. This method is merely an alternative to that.
 
 

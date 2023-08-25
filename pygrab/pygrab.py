@@ -7,7 +7,6 @@ majority of its heavy-duty tasks to smaller, specialized auxiliary
 modules and functions, ensuring an intuitive and seamless experience 
 in handling various types of web requests, including asynchronous tasks, 
 Javascript-enabled sites, and local requests.
-
 """
 
 
@@ -27,7 +26,7 @@ import threading as _threading
 import nest_asyncio as _nest_asyncio
 
 
-def get(url: str, retries=5, enable_js=False, *args, **kwargs): 
+def get(url:str, retries=2, enable_js=False, *args, **kwargs): 
     """
     Gets the content at the specified URL.
 
@@ -43,6 +42,7 @@ def get(url: str, retries=5, enable_js=False, *args, **kwargs):
 
     Raises:
         TypeError: If any of the arguments are not of the desired data type.
+        ValueError: If the user is trying to read a local file
     """
     if not (isinstance(url, str)):
         raise TypeError("Argument 'url' must be a str")
@@ -53,6 +53,8 @@ def get(url: str, retries=5, enable_js=False, *args, **kwargs):
 
     local_file_starts = ['./', 'C:', '/'] 
     url_file_starts = ['http', 'ftp:', 'mailto:']
+    if _re.match(r'^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}(?::\d{1,5})?$', url):
+        url = "http://" + url
     if any([url.startswith(i) for i in local_file_starts]):
         raise ValueError ("Url must start with http. use get_local() for local requests.")
     elif any([url.startswith(i) for i in url_file_starts]):
@@ -92,9 +94,9 @@ def get(url: str, retries=5, enable_js=False, *args, **kwargs):
                     raise ModuleNotFoundError("Required module 'PySocks' not found.")
                 raise _requests.exceptions.InvalidSchema(err)
 
-    raise Exception(f"Invalid url: {url}")
+    raise ValueError(f"Invalid url or IP address: {url}")
     
-def get_async(urls:list, retries=5, enable_js=False, thread_limit=800, time_rest=0, *args, **kwargs) -> dict:
+def get_async(urls:list, retries=2, enable_js=False, thread_limit=800, time_rest=0, *args, **kwargs) -> dict:
     """
     Gets multiple URLs asynchronously.
 
@@ -187,7 +189,7 @@ def get_local(filename:str, local_read_type:str='r', encoding:str='utf-8') -> st
         data = f.read()
     return data
 
-def download(url: str, local_filename:str=None, retries=5) -> None:
+def download(url: str, local_filename:str=None, retries=2) -> None:
     """
     Downloads a file from a given URL and saves it locally.
 
@@ -231,7 +233,7 @@ def download(url: str, local_filename:str=None, retries=5) -> None:
     else:
         raise Exception(f"Error fetching url. Status code - {response.status_code}")
 
-def download_async(urls:list, local_filenames:list=None, retries=5, thread_limit=500, time_rest=0) -> None:
+def download_async(urls:list, local_filenames:list=None, retries=2, thread_limit=500, time_rest=0) -> None:
     """
     Executes multiple file downloads asynchronously from a list of given URLs and saves them locally.
 
@@ -473,7 +475,7 @@ def scan_iprange(ips:str, port:int=80, timeout:int=1) -> list:
     return [key for key, value, in res.items() if value]
 
 # Helper function for get_async
-def __grab_thread_wrapper(url:str, payload:dict, args, kwargs, retries=5, enable_js=False):
+def __grab_thread_wrapper(url:str, payload:dict, args, kwargs, retries=2, enable_js=False):
     try:
         res = get(url, retries=retries, enable_js=enable_js, *args, **kwargs)
         payload[url] = res
