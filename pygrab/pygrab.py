@@ -479,8 +479,8 @@ def __grab_thread_wrapper(url:str, payload:dict, args, kwargs, retries=2, enable
     try:
         res = get(url, retries=retries, enable_js=enable_js, *args, **kwargs)
         payload[url] = res
-    except _requests.exceptions.RequestException as err:
-        _Warning.raiseWarning(f"Warning: Failed to grab {url} | {err}\n")
+    except Exception as err:
+        _Warning.raiseWarning(f"Warning: Failed to grab {url} | {err}")
 
 # Helper function for scan_iprange
 def __scan_ip_wrapper(ip, port, timeout, res):
