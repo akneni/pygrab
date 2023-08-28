@@ -376,7 +376,7 @@ def end_rotate_tor():
 def warn_settings(warn:bool):
     if not isinstance(warn, bool):
         raise TypeError("Argument 'warn' bust be a bool")
-    _TorRotation.warning_settings = warn
+    _Warning.warning_settings = warn
 
 def scan_ip(ip:str, port:int=80, timeout:int=1) -> bool:
     """
