@@ -12,6 +12,7 @@ Javascript-enabled sites, and local requests.
 
 from .tor import Tor
 from .session import Session
+from .js_scraper import js_scraper as _js_scraper
 from requests import Request
 from requests import Response
 from .warning import Warning as _Warning
@@ -63,22 +64,8 @@ def get(url:str, retries=2, enable_js=False, *args, **kwargs):
         
         # Handle Js enables requests
         if enable_js:
-            try:
-                res = __grab_enable_js(url, kwargs)
-            except RuntimeError as err:
-                if "This event loop is already running" in str(err):
-                    # if this occurs, the runtime us a jupiter notebook
-                    _nest_asyncio.apply()
-                    res = __grab_enable_js(url, kwargs)
-                else:
-                    raise RuntimeError(err)
-            
-            resp = _requests.models.Response()
-            resp.status_code = 200
-            resp.headers = {'header_key': 'NaN'}
-            resp._content = str(res).encode("utf-8")
-            resp.request = _requests.models.PreparedRequest()
-            return resp
+            res = _js_scraper.pyppeteer_get(url)
+            return __responseify_html(res)
         else:
             session = _requests.Session()
             retry = _requests.packages.urllib3.util.retry.Retry(total=retries, backoff_factor=0.1, status_forcelist=[500, 502, 503, 504])
@@ -132,6 +119,11 @@ def get_async(urls:list, retries=2, enable_js=False, thread_limit=800, time_rest
     else:
         # remove repeats to prevent possible DoS attacks
         urls = list(set(urls))
+    
+    # Handle async js enabled scraping
+    if enable_js:
+        htmls = _js_scraper.pyppeteer_get_async(urls)
+        return {k:__responseify_html(v) for k,v in zip(urls,htmls)}
 
     # If tor rotations isn't None, then make this entire batch of requests with one connection
     # and then the connection to be changed on the next request
@@ -144,7 +136,7 @@ def get_async(urls:list, retries=2, enable_js=False, thread_limit=800, time_rest
         sub_urls = urls[thread_counter:thread_counter+thread_limit]
         threads = []
         for url in sub_urls:
-            threads.append(_threading.Thread(target=__grab_thread_wrapper, args=[url, result, args, kwargs, retries, enable_js]))
+            threads.append(_threading.Thread(target=__grab_thread_wrapper, args=[url, result, args, kwargs, retries]))
             threads[-1].start()
             _time.sleep(time_rest)
         
@@ -475,9 +467,9 @@ def scan_iprange(ips:str, port:int=80, timeout:int=1) -> list:
     return [key for key, value, in res.items() if value]
 
 # Helper function for get_async
-def __grab_thread_wrapper(url:str, payload:dict, args, kwargs, retries=2, enable_js=False):
+def __grab_thread_wrapper(url:str, payload:dict, args, kwargs, retries=2):
     try:
-        res = get(url, retries=retries, enable_js=enable_js, *args, **kwargs)
+        res = get(url, retries=retries, enable_js=False, *args, **kwargs)
         payload[url] = res
     except Exception as err:
         _Warning.raiseWarning(f"Warning: Failed to grab {url} | {err}")
@@ -488,37 +480,6 @@ def __scan_ip_wrapper(ip, port, timeout, res):
         res[ip] = scan_ip(ip=ip, port=port, timeout=timeout)
     except ValueError:
         pass
-
-# helper funtion for JS enables requests
-def __grab_enable_js(url, kwargs):
-    return _asyncio.get_event_loop().run_until_complete(__grab_enable_js_async(url, kwargs))
-
-# helper funtion for JS enables requests
-async def __grab_enable_js_async(url, kwargs):
-    if Tor.tor_status():
-        if 'proxies' in kwargs.keys():
-            proxy = kwargs['proxies']['http']
-        else:
-            proxy = Tor.tor_proxies['http'].replace('socks5h', 'socks5')
-        browser = await _launch(args=['--proxy-server=' + proxy])
-    else:
-        browser = await _launch()
-    
-    page = await browser.newPage()
-
-    # Merges headers parameter passed by the user to tor headers
-    if 'headers' not in kwargs.keys():
-        kwargs['headers'] = {}
-    if Tor.tor_status():
-        for key, val in Tor.tor_headers.items():
-            if key not in kwargs['headers']:
-                kwargs['headers'][key] = val
-    await page.setExtraHTTPHeaders(kwargs['headers'])
-
-    await page.goto(url, waitUntil='networkidle0')
-    html = await page.content()    
-    await browser.close()
-    return html
 
 def __handle_tor_rotations():
     # Handles rotating tor connections
@@ -541,3 +502,15 @@ def __append_tor_kwargs(kwargs):
             for key, val in Tor.tor_headers.items():
                 if key not in kwargs['headers']:
                     kwargs['headers'][key] = val
+
+def __responseify_html(html):
+    resp = _requests.models.Response()
+    resp.status_code = 200
+    resp.headers = {'header_key': 'NaN'}
+    resp._content = str(html).encode("utf-8")
+    resp.request = _requests.models.PreparedRequest()
+    return resp
+
+print(
+    get_async(['http://www.google.com', 'http://www.paypal.com'])
+)
