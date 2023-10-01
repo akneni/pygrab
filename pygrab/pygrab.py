@@ -510,7 +510,3 @@ def __responseify_html(html):
     resp._content = str(html).encode("utf-8")
     resp.request = _requests.models.PreparedRequest()
     return resp
-
-print(
-    get_async(['http://www.google.com', 'http://www.paypal.com'])
-)
