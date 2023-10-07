@@ -68,7 +68,7 @@ class js_scraper:
     async def get_page_content(cls, browser, url):
         page = await browser.newPage()
         try:
-            await page.goto(url, waitUntil='networkidle0', options={"timeout":10_000})
+            await page.goto(url, waitUntil='networkidle0', options={"timeout":15_000})
             html = await page.content()
         finally:
             await page.close()
