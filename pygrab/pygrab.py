@@ -11,23 +11,17 @@ Javascript-enabled sites, and local requests.
 
 
 from .tor import Tor
-from .session import Session
 from .js_scraper import js_scraper as _js_scraper
-from requests import Request
-from requests import Response
 from .warning import Warning as _Warning
 from .tor_rotation import TorRotation as _TorRotation
 import requests as _requests
-from pyppeteer import launch as _launch
-import asyncio as _asyncio
 import time as _time
 import socket as _socket
 import re as _re
 import threading as _threading
-import nest_asyncio as _nest_asyncio
 
 
-def get(url:str, retries=2, enable_js=False, *args, **kwargs): 
+def get(url:str, retries=2, enable_js=False, ignore_tor_rotations=False, *args, **kwargs): 
     """
     Gets the content at the specified URL.
 
@@ -60,7 +54,8 @@ def get(url:str, retries=2, enable_js=False, *args, **kwargs):
         raise ValueError ("Url must start with http. use get_local() for local requests.")
     elif any([url.startswith(i) for i in url_file_starts]):
         # Handles rotating tor connections
-        __handle_tor_rotations()
+        if not ignore_tor_rotations:
+            __handle_tor_rotations()
         
         # Handle Js enables requests
         if enable_js:
@@ -83,7 +78,7 @@ def get(url:str, retries=2, enable_js=False, *args, **kwargs):
 
     raise ValueError(f"Invalid url or IP address: {url}")
     
-def get_async(urls:list, retries=2, enable_js=False, thread_limit=800, time_rest=0, *args, **kwargs) -> dict:
+def get_async(urls:list, retries=2, enable_js=False, thread_limit=None, time_rest=0, *args, **kwargs) -> dict:
     """
     Gets multiple URLs asynchronously.
 
@@ -105,6 +100,7 @@ def get_async(urls:list, retries=2, enable_js=False, thread_limit=800, time_rest
     Raises:
         TypeError: If any of the arguments are not of the desired data type.
     """
+
     if (isinstance(urls, (str, int, float, bool))):
         raise TypeError("Argument 'urls' must be an iterable object")
     elif not (isinstance(retries, int)):
@@ -113,22 +109,26 @@ def get_async(urls:list, retries=2, enable_js=False, thread_limit=800, time_rest
         raise TypeError("Argument 'enable_js' must be a bool")
     elif not (isinstance(time_rest, int) or isinstance(time_rest, float)):
         raise TypeError("Argument 'time_rest' must be a int or float")
+    elif not (isinstance(thread_limit, int) or (thread_limit is None)):
+        raise TypeError("Argument 'thread_limit' must be a int")
 
-    if type(urls) == str:
-        return [get(urls, retries=retries, enable_js=enable_js, *args, **kwargs)]
-    else:
-        # remove repeats to prevent possible DoS attacks
-        urls = list(set(urls))
+    if thread_limit is None:
+        thread_limit = 30 if enable_js else 800
+
+    # remove repeats to prevent possible DoS attacks
+    urls = list(set(urls))
     
     # Handle async js enabled scraping
     if enable_js:
-        htmls = _js_scraper.pyppeteer_get_async(urls)
-        return {k:__responseify_html(v) for k,v in zip(urls,htmls)}
-
-    # If tor rotations isn't None, then make this entire batch of requests with one connection
-    # and then the connection to be changed on the next request
-    reset_tor = 0 if _TorRotation.Tor_Reconnect is None else _TorRotation.Tor_Reconnect[1]
-    _TorRotation.Tor_Reconnect = None
+        __handle_tor_rotations(0) # Don't increment the number of requests, but rotate connections if it's necessary
+        res = {}
+        for thread_counter in range (0, len(urls), thread_limit):
+            curr_urls = urls[thread_counter:thread_counter+thread_limit]
+            if enable_js:
+                htmls:dict = _js_scraper.pyppeteer_get_async(curr_urls)
+                res.update( {k:__responseify_html(v) for k,v in htmls.items()} )
+        __handle_tor_rotations(len(urls))
+        return res
 
     result = {}
     thread_counter = 0
@@ -144,10 +144,7 @@ def get_async(urls:list, retries=2, enable_js=False, thread_limit=800, time_rest
             thread.join()
         thread_counter += thread_limit
 
-    # If tor rotations isn't None, then make this entire batch of requests with one connection
-    # and then the connection to be changed on the next request
-    if reset_tor != 0:
-        _TorRotation.Tor_Reconnect = [0, reset_tor]
+    __handle_tor_rotations(len(urls))
         
     return result
 
@@ -181,7 +178,7 @@ def get_local(filename:str, local_read_type:str='r', encoding:str='utf-8') -> st
         data = f.read()
     return data
 
-def download(url: str, local_filename:str=None, retries=2) -> None:
+def download(url:str, local_filename:str=None, retries:int=2, ignore_tor_rotations:bool=False) -> None:
     """
     Downloads a file from a given URL and saves it locally.
 
@@ -217,7 +214,7 @@ def download(url: str, local_filename:str=None, retries=2) -> None:
     # No need to handle tor roations here as it's already handled in get()
 
     # sends a request to get the file contents
-    response = get(url, retries=retries)
+    response = get(url, retries=retries, ignore_tor_rotations=ignore_tor_rotations)
 
     if response.status_code == 200:
         with open(local_filename, 'wb') as f:
@@ -265,11 +262,6 @@ def download_async(urls:list, local_filenames:list=None, retries=2, thread_limit
     else:
         local_filenames = [None for _ in range(len(urls))]
 
-    # If tor rotations isn't None, then make this entire batch of requests with one connection
-    # and then the connection to be changed on the next request
-    reset_tor = 0 if _TorRotation.Tor_Reconnect is None else _TorRotation.Tor_Reconnect[1]
-    _TorRotation.Tor_Reconnect = None
-
     # Uses the threading module to asynchrounously download the files
     thread_counter = 0
     while (thread_counter < len(urls)):
@@ -278,7 +270,7 @@ def download_async(urls:list, local_filenames:list=None, retries=2, thread_limit
         sub_local_filename= local_filenames[thread_counter:thread_counter+thread_limit]
 
         for url, name in zip(sub_urls, sub_local_filename):
-            threads.append(_threading.Thread(target=download, args=[url, name, retries]))
+            threads.append(_threading.Thread(target=download, args=[url, name, retries, True]))
             threads[-1].start()
             _time.sleep(time_rest)
         
@@ -288,8 +280,7 @@ def download_async(urls:list, local_filenames:list=None, retries=2, thread_limit
 
     # If tor rotations isn't None, then make this entire batch of requests with one connection
     # and then the connection to be changed on the next request
-    if reset_tor != 0:
-        _TorRotation.Tor_Reconnect = [0, reset_tor]
+    __handle_tor_rotations(len(urls))
     
 
 def head(url:str, **kwargs):
@@ -469,7 +460,7 @@ def scan_iprange(ips:str, port:int=80, timeout:int=1) -> list:
 # Helper function for get_async
 def __grab_thread_wrapper(url:str, payload:dict, args, kwargs, retries=2):
     try:
-        res = get(url, retries=retries, enable_js=False, *args, **kwargs)
+        res = get(url, retries=retries, enable_js=False, ignore_tor_rotations=True, *args, **kwargs)
         payload[url] = res
     except Exception as err:
         _Warning.raiseWarning(f"Warning: Failed to grab {url} | {err}")
@@ -481,14 +472,14 @@ def __scan_ip_wrapper(ip, port, timeout, res):
     except ValueError:
         pass
 
-def __handle_tor_rotations():
+def __handle_tor_rotations(num_req=1):
     # Handles rotating tor connections
     if _TorRotation.Tor_Reconnect is not None:
         if _TorRotation.Tor_Reconnect[0] <= 0:
             Tor.start_tor()
             _TorRotation.Tor_Reconnect[0] = _TorRotation.Tor_Reconnect[1] - 1
         else:
-            _TorRotation.Tor_Reconnect[0] -= 1
+            _TorRotation.Tor_Reconnect[0] -= num_req
 
 def __append_tor_kwargs(kwargs):
     if Tor.tor_status():
