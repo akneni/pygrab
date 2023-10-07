@@ -63,15 +63,9 @@ def get(url:str, retries=2, enable_js=False, ignore_tor_rotations=False, *args, 
             res = _js_scraper.pyppeteer_get(url)
             return __responseify_html(res)
         else:
-            session = _requests.Session()
-            retry = _requests.packages.urllib3.util.retry.Retry(total=retries, backoff_factor=0.1, status_forcelist=[500, 502, 503, 504])
-            adapter = _requests.adapters.HTTPAdapter(max_retries=retry)
-            session.mount('http://', adapter)
-            session.mount('https://', adapter)
-
             __append_tor_kwargs(kwargs)
             try:
-                return session.get(url, *args, **kwargs)
+                return _requests.get(url, *args, **kwargs)
             except _requests.exceptions.InvalidSchema as err:
                 if 'Missing dependencies for SOCKS support'.lower() in str(err).lower():
                     raise ModuleNotFoundError("Required module 'PySocks' not found.")
