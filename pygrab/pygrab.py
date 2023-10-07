@@ -11,6 +11,7 @@ Javascript-enabled sites, and local requests.
 
 
 from .tor import Tor
+from .session import Session
 from .js_scraper import js_scraper as _js_scraper
 from .warning import Warning as _Warning
 from .tor_rotation import TorRotation as _TorRotation

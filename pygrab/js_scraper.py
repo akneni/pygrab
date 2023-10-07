@@ -10,12 +10,19 @@ _nest_asyncio.apply()
 class js_scraper:
     browser_reg = None
     browser_tor = None
+    cleanup_registered = False
+
+    @classmethod
+    def __browser_cleanup(cls):
+        if cls.browser_reg is not None:
+            _asyncio.run(cls.browser_reg.close())
+        if cls.browser_tor is not None:
+            _asyncio.run(cls.browser_tor.close())
 
     @classmethod
     async def __get_browser_reg(cls):
         if cls.browser_reg is None:
             cls.browser_reg = await _launch()
-            _atexit.register(cls.browser_reg.close)
         return cls.browser_reg
 
     @classmethod
@@ -26,13 +33,16 @@ class js_scraper:
             cls.browser_tor = await _launch(
                 args=["--proxy-server=socks5://127.0.0.1:9050"]
             )
-            _atexit.register(cls.browser_tor.close)
         return cls.browser_tor
 
     @classmethod
     async def __get_browser(cls, use_tor=None):
         if use_tor is None:
             use_tor = Tor.tor_status()
+        
+        if not cls.cleanup_registered:
+            _atexit.register(cls.__browser_cleanup)
+            cls.cleanup_registered = True
 
         return await (cls.__get_browser_tor() if (use_tor) else cls.__get_browser_reg())
 
@@ -41,7 +51,7 @@ class js_scraper:
         browser = await cls.__get_browser(use_tor)
         page = await browser.newPage()
         try:
-            await page.goto(url, waitUntil='networkidle0', options={"timeout":10_000})
+            await page.goto(url, waitUntil='networkidle0', options={"timeout":25_000})
             html = await page.content()
         finally:
             await page.close()
