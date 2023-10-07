@@ -1,11 +1,9 @@
+from .warning import Warning as _Warning
+from .tor import Tor as _Tor
+from .js_scraper import js_scraper as _js_scraper
 import requests as _requests
 import threading as _threading
-from .tor import Tor as _Tor
 import time as _time
-from .warning import Warning as _Warning
-import asyncio as _asyncio
-from pyppeteer import launch as _launch
-import nest_asyncio as _nest_asyncio
 
 class Session(_requests.Session):
     def __init__(self, use_tor:bool=None, **kwargs):
@@ -28,39 +26,37 @@ class Session(_requests.Session):
 
     def get(self, url:str, enable_js=False, **kwargs):
         if enable_js:
-            try:
-                res = self.__grab_enable_js(url, kwargs)
-            except RuntimeError as err:
-                if "This event loop is already running" in str(err):
-                    # if this occurs, the runtime us a jupiter notebook
-                    _nest_asyncio.apply()
-                    res = self.__grab_enable_js(url, kwargs)
-                else:
-                    raise RuntimeError(err)
-            
-            resp = _requests.models.Response()
-            resp.status_code = 200
-            resp.headers = {'header_key': 'NaN'}  
-            resp._content = str(res).encode("utf-8") 
-            resp.request = _requests.models.PreparedRequest()
-            return resp
+            res = _js_scraper.pyppeteer_get(url, self.__use_tor)
+            return self.__responseify_html(res)
         else:
             self.__append_tor_kwargs(kwargs)
             return super().get(url, **kwargs)
     
-    def get_async(self, urls, enable_js=False, thread_limit:int=800, time_rest:float=0, **kwargs) -> dict:
+    def get_async(self, urls, enable_js=False, thread_limit:int=None, time_rest:float=0, **kwargs) -> dict:
         if (isinstance(urls, (str, int, float, bool))):
             raise TypeError("Argument 'urls' must be an iterable object")
         elif not (isinstance(enable_js, bool)):
             raise TypeError("Argument 'enable_js' must be a bool")
         elif not (isinstance(time_rest, int) or isinstance(time_rest, float)):
             raise TypeError("Argument 'time_rest' must be a int or float")
+        elif not (isinstance(thread_limit, int) or thread_limit is None):
+            raise TypeError("Argument 'thread_limit' must be a int")
 
-        if type(urls) == str:
-            return [self.get(urls, enable_js=enable_js, **kwargs)]
-        else:
-            # remove repeats to prevent possible DoS attacks
-            urls = list(set(urls))
+        if thread_limit is None:
+            thread_limit = 30 if enable_js else 800
+
+        # remove repeats to prevent possible DoS attacks
+        urls = list(set(urls))
+
+        # Handle async js enabled scraping
+        if enable_js:
+            res = {}
+            for thread_counter in range (0, len(urls), thread_limit):
+                curr_urls = urls[thread_counter:thread_counter+thread_limit]
+                if enable_js:
+                    htmls:dict = _js_scraper.pyppeteer_get_async(curr_urls, self.__use_tor)
+                    res.update( {k:self.__responseify_html(v) for k,v in htmls.items()} )
+            return res
 
         result = {}
         thread_counter = 0
@@ -68,7 +64,7 @@ class Session(_requests.Session):
             sub_urls = urls[thread_counter:thread_counter+thread_limit]
             threads = []
             for url in sub_urls:
-                threads.append(_threading.Thread(target=self.__grab_thread_wrapper, args=[url, result, kwargs, enable_js]))
+                threads.append(_threading.Thread(target=self.__grab_thread_wrapper, args=[url, result, kwargs]))
                 threads[-1].start()
                 _time.sleep(time_rest)
             
@@ -218,40 +214,17 @@ class Session(_requests.Session):
                     if key not in kwargs['headers']:
                         kwargs['headers'][key] = val
     
-    def __grab_thread_wrapper(self, url:str, payload:dict, kwargs, enable_js=False):
+    def __grab_thread_wrapper(self, url:str, payload:dict, kwargs):
         try:
-            res = self.get(url, enable_js=enable_js, **kwargs)
+            res = self.get(url, enable_js=False, **kwargs)
             payload[url] = res
         except _requests.exceptions.RequestException as err:
             _Warning.raiseWarning(f"Warning: Failed to grab {url} | {err}\n")
 
-    # helper funtion for JS enables requests
-    def __grab_enable_js(self, url, kwargs):
-        return _asyncio.get_event_loop().run_until_complete(self.__grab_enable_js_async(url, kwargs))
-
-    # helper funtion for JS enables requests
-    async def __grab_enable_js_async(self, url, kwargs):
-        if _Tor.tor_status():
-            if 'proxies' in kwargs.keys():
-                proxy = kwargs['proxies']['http']
-            else:
-                proxy = _Tor.tor_proxies['http'].replace('socks5h', 'socks5')
-            browser = await _launch(args=['--proxy-server=' + proxy])
-        else:
-            browser = await _launch()
-        
-        page = await browser.newPage()
-
-        # Merges headers parameter passed by the user to tor headers
-        if 'headers' not in kwargs.keys():
-            kwargs['headers'] = {}
-        if _Tor.tor_status():
-            for key, val in _Tor.tor_headers.items():
-                if key not in kwargs['headers']:
-                    kwargs['headers'][key] = val
-        await page.setExtraHTTPHeaders(kwargs['headers'])
-
-        await page.goto(url, waitUntil='networkidle0')
-        html = await page.content()    
-        await browser.close()
-        return html
+    def __responseify_html(self, html):
+        resp = _requests.models.Response()
+        resp.status_code = 200
+        resp.headers = {'header_key': 'NaN'}
+        resp._content = str(html).encode("utf-8")
+        resp.request = _requests.models.PreparedRequest()
+        return resp

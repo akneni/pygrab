@@ -8,35 +8,37 @@ _nest_asyncio.apply()
 
 
 class js_scraper:
-    browser = None
-    browser_torred = False
+    browser_reg = None
+    browser_tor = None
 
     @classmethod
-    async def __get_browser(cls):
-        if cls.browser is None:
-            if Tor.tor_status():
-                cls.browser = await _launch(
-                    args=[f"--proxy-server=socks5://127.0.0.1:9050"]
-                )
-                cls.browser_torred = True
-            else:
-                cls.browser = await _launch()
-            _atexit.register(cls.browser.close)
-        elif Tor.tor_status() and not cls.browser_torred:
-            if cls.browser is not None: await cls.browser.close()
-            cls.browser = await _launch(
-                args=[f"--proxy-server=socks5://127.0.0.1:9050"]
+    async def __get_browser_reg(cls):
+        if cls.browser_reg is None:
+            cls.browser_reg = await _launch()
+            _atexit.register(cls.browser_reg.close)
+        return cls.browser_reg
+
+    @classmethod
+    async def __get_browser_tor(cls):
+        if not Tor.tor_status():
+            Tor.start_tor()
+        if cls.browser_tor is None:
+            cls.browser_tor = await _launch(
+                args=["--proxy-server=socks5://127.0.0.1:9050"]
             )
-            cls.browser_torred = True
-        elif not Tor.tor_status() and cls.browser_torred:
-            if cls.browser is not None: await cls.browser.close()
-            cls.browser = await _launch()
-            cls.browser_torred = False
-        return cls.browser
+            _atexit.register(cls.browser_tor.close)
+        return cls.browser_tor
 
     @classmethod
-    async def __pyppeteer_kernel(cls, url):
-        browser = await cls.__get_browser()
+    async def __get_browser(cls, use_tor=None):
+        if use_tor is None:
+            use_tor = Tor.tor_status()
+
+        return await (cls.__get_browser_tor() if (use_tor) else cls.__get_browser_reg())
+
+    @classmethod
+    async def __pyppeteer_kernel(cls, url, use_tor=None):
+        browser = await cls.__get_browser(use_tor)
         page = await browser.newPage()
         try:
             await page.goto(url, waitUntil='networkidle0', options={"timeout":10_000})
@@ -46,10 +48,10 @@ class js_scraper:
         return html
 
     @classmethod
-    def pyppeteer_get(cls, url):
+    def pyppeteer_get(cls, url, use_tor=None):
         # Test it
         loop = _asyncio.get_event_loop()
-        result = loop.run_until_complete(cls.__pyppeteer_kernel(url))
+        result = loop.run_until_complete(cls.__pyppeteer_kernel(url, use_tor))
         return result
 
     @classmethod
@@ -63,8 +65,8 @@ class js_scraper:
         return html
 
     @classmethod
-    async def scrape_all(cls, urls) -> dict:
-        browser = await cls.__get_browser()
+    async def scrape_all(cls, urls, use_tor=None) -> dict:
+        browser = await cls.__get_browser(use_tor)
         tasks = [cls.get_page_content(browser, url) for url in urls]
         res = await _asyncio.gather(*tasks, return_exceptions=True)
 
@@ -77,5 +79,5 @@ class js_scraper:
         return res_dict
 
     @classmethod
-    def pyppeteer_get_async(cls, urls) -> dict:
-        return _asyncio.run(cls.scrape_all(urls))
+    def pyppeteer_get_async(cls, urls, use_tor=None) -> dict:
+        return _asyncio.run(cls.scrape_all(urls, use_tor))
