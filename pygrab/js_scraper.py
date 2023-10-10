@@ -47,37 +47,37 @@ class js_scraper:
         return await (cls.__get_browser_tor() if (use_tor) else cls.__get_browser_reg())
 
     @classmethod
-    async def __pyppeteer_kernel(cls, url, use_tor=None):
+    async def __pyppeteer_kernel(cls, url, use_tor:bool=None, timeout:int=20):
         browser = await cls.__get_browser(use_tor)
         page = await browser.newPage()
         try:
-            await page.goto(url, waitUntil='networkidle0', options={"timeout":25_000})
+            await page.goto(url, waitUntil='networkidle0', options={"timeout":timeout*1000})
             html = await page.content()
         finally:
             await page.close()
         return html
 
     @classmethod
-    def pyppeteer_get(cls, url, use_tor=None):
+    def pyppeteer_get(cls, url, use_tor:bool=None, timeout:int=20):
         # Test it
         loop = _asyncio.get_event_loop()
-        result = loop.run_until_complete(cls.__pyppeteer_kernel(url, use_tor))
+        result = loop.run_until_complete(cls.__pyppeteer_kernel(url, use_tor, timeout))
         return result
 
     @classmethod
-    async def get_page_content(cls, browser, url):
+    async def get_page_content(cls, browser, url, timeout:int=20):
         page = await browser.newPage()
         try:
-            await page.goto(url, waitUntil='networkidle0', options={"timeout":15_000})
+            await page.goto(url, waitUntil='networkidle0', options={"timeout":timeout*1000})
             html = await page.content()
         finally:
             await page.close()
         return html
 
     @classmethod
-    async def scrape_all(cls, urls, use_tor=None) -> dict:
+    async def scrape_all(cls, urls, use_tor=None, timeout:int=20) -> dict:
         browser = await cls.__get_browser(use_tor)
-        tasks = [cls.get_page_content(browser, url) for url in urls]
+        tasks = [cls.get_page_content(browser, url, timeout) for url in urls]
         res = await _asyncio.gather(*tasks, return_exceptions=True)
 
         res_dict = {}
@@ -89,5 +89,5 @@ class js_scraper:
         return res_dict
 
     @classmethod
-    def pyppeteer_get_async(cls, urls, use_tor=None) -> dict:
-        return _asyncio.run(cls.scrape_all(urls, use_tor))
+    def pyppeteer_get_async(cls, urls, use_tor=None, timeout:int=20) -> dict:
+        return _asyncio.run(cls.scrape_all(urls, use_tor=use_tor, timeout=timeout))

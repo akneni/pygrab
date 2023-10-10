@@ -22,7 +22,7 @@ import re as _re
 import threading as _threading
 
 
-def get(url:str, enable_js=False, ignore_tor_rotations=False, timeout=5, *args, **kwargs): 
+def get(url:str, enable_js:bool=False, ignore_tor_rotations:bool=False, timeout:int=None, *args, **kwargs): 
     """
     Gets the content at the specified URL.
 
@@ -48,6 +48,9 @@ def get(url:str, enable_js=False, ignore_tor_rotations=False, timeout=5, *args, 
     elif not (isinstance(enable_js, bool)):
         raise TypeError("Argument 'enable_js' must be a bool")
 
+    if timeout is None:
+        timeout = 20 if enable_js else 5
+
     local_file_starts = ['./', 'C:', '/'] 
     url_file_starts = ['http', 'ftp:', 'mailto:']
     if _re.match(r'^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}(?::\d{1,5})?$', url):
@@ -61,7 +64,7 @@ def get(url:str, enable_js=False, ignore_tor_rotations=False, timeout=5, *args, 
         
         # Handle Js enables requests
         if enable_js:
-            res = _js_scraper.pyppeteer_get(url)
+            res = _js_scraper.pyppeteer_get(url, timeout=timeout)
             return __responseify_html(res)
         else:
             __append_tor_kwargs(kwargs)
@@ -74,7 +77,7 @@ def get(url:str, enable_js=False, ignore_tor_rotations=False, timeout=5, *args, 
 
     raise ValueError(f"Invalid url or IP address: {url}")
     
-def get_async(urls:list, enable_js:bool=False, timeout=5, thread_limit:int=None, time_rest:float=0, *args, **kwargs) -> dict:
+def get_async(urls:list, enable_js:bool=False, timeout:int=None, thread_limit:int=None, time_rest:float=0, *args, **kwargs) -> dict:
     """
     Gets multiple URLs asynchronously.
 
@@ -104,9 +107,15 @@ def get_async(urls:list, enable_js:bool=False, timeout=5, thread_limit:int=None,
         raise TypeError("Argument 'time_rest' must be a int or float")
     elif not (isinstance(thread_limit, int) or (thread_limit is None)):
         raise TypeError("Argument 'thread_limit' must be a int")
-
+    elif not (isinstance(timeout, int) or isinstance(timeout, float) or (thread_limit is None)):
+        raise TypeError("Argument 'timeout' must be a int or float")
+    
     if thread_limit is None:
         thread_limit = 30 if enable_js else 800
+    
+    if timeout is None:
+        timeout = 20 if enable_js else 8
+
 
     # remove repeats to prevent possible DoS attacks
     urls = list(set(urls))
@@ -118,7 +127,7 @@ def get_async(urls:list, enable_js:bool=False, timeout=5, thread_limit:int=None,
         for thread_counter in range (0, len(urls), thread_limit):
             curr_urls = urls[thread_counter:thread_counter+thread_limit]
             if enable_js:
-                htmls:dict = _js_scraper.pyppeteer_get_async(curr_urls)
+                htmls:dict = _js_scraper.pyppeteer_get_async(curr_urls, timeout=timeout)
                 res.update( {k:__responseify_html(v) for k,v in htmls.items()} )
         __handle_tor_rotations(len(urls))
         return res
