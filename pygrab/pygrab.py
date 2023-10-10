@@ -22,14 +22,15 @@ import re as _re
 import threading as _threading
 
 
-def get(url:str, retries=2, enable_js=False, ignore_tor_rotations=False, *args, **kwargs): 
+def get(url:str, enable_js=False, ignore_tor_rotations=False, timeout=5, *args, **kwargs): 
     """
     Gets the content at the specified URL.
 
     Parameters:
         url (str): The URL to get.
-        retries (int, optional): The number of times to retry the request if it fails. Defaults to 5.
-        encoding (str, optional): The encoding to use when reading the response. Defaults to 'utf-8'.
+        enable_js (bool, optional): Whether to use a headless browser to scrape a url.
+        ignore_tor_rotations (bool, optional): Whether to count this request when calculating tor rotations
+        timeout (int, optional): The timeout in number of seconds
         *args: Variable length argument list passed to requests.get.
         **kwargs: Arbitrary keyword arguments passed to requests.get.
 
@@ -42,8 +43,8 @@ def get(url:str, retries=2, enable_js=False, ignore_tor_rotations=False, *args, 
     """
     if not (isinstance(url, str)):
         raise TypeError("Argument 'url' must be a str")
-    elif not (isinstance(retries, int)):
-        raise TypeError("Argument 'retries' must be a int")
+    elif not (isinstance(enable_js, bool)):
+        raise TypeError("Argument 'enable_js' must be a bool")
     elif not (isinstance(enable_js, bool)):
         raise TypeError("Argument 'enable_js' must be a bool")
 
@@ -65,7 +66,7 @@ def get(url:str, retries=2, enable_js=False, ignore_tor_rotations=False, *args, 
         else:
             __append_tor_kwargs(kwargs)
             try:
-                return _requests.get(url, *args, **kwargs)
+                return _requests.get(url, timeout=timeout, *args, **kwargs)
             except _requests.exceptions.InvalidSchema as err:
                 if 'Missing dependencies for SOCKS support'.lower() in str(err).lower():
                     raise ModuleNotFoundError("Required module 'PySocks' not found.")
@@ -73,7 +74,7 @@ def get(url:str, retries=2, enable_js=False, ignore_tor_rotations=False, *args, 
 
     raise ValueError(f"Invalid url or IP address: {url}")
     
-def get_async(urls:list, retries=2, enable_js=False, thread_limit=None, time_rest=0, *args, **kwargs) -> dict:
+def get_async(urls:list, enable_js:bool=False, timeout=5, thread_limit:int=None, time_rest:float=0, *args, **kwargs) -> dict:
     """
     Gets multiple URLs asynchronously.
 
@@ -83,9 +84,8 @@ def get_async(urls:list, retries=2, enable_js=False, thread_limit=None, time_res
 
     Args:
         urls (list): A list of URLs to grab.
-        retries (int, optional): The number of times to retry the HTTP request in case of failure. Defaults to 5.
         thread_limit (int, optional): The maximum number of threads that will be spawned. 
-        time_rest (int, optional): The time in seconds to wait between starting each thread. Defaults to 0.
+        time_rest (float, optional): The time in seconds to wait between starting each thread. Defaults to 0.
         *args: Variable length argument list to pass to the get function.
         **kwargs: Arbitrary keyword arguments to pass to the get function.
 
@@ -98,8 +98,6 @@ def get_async(urls:list, retries=2, enable_js=False, thread_limit=None, time_res
 
     if (isinstance(urls, (str, int, float, bool))):
         raise TypeError("Argument 'urls' must be an iterable object")
-    elif not (isinstance(retries, int)):
-        raise TypeError("Argument 'retries' must be a int")
     elif not (isinstance(enable_js, bool)):
         raise TypeError("Argument 'enable_js' must be a bool")
     elif not (isinstance(time_rest, int) or isinstance(time_rest, float)):
@@ -127,17 +125,16 @@ def get_async(urls:list, retries=2, enable_js=False, thread_limit=None, time_res
 
     result = {}
     thread_counter = 0
-    while thread_counter < len(urls):
+    for thread_counter in range (0, len(urls), thread_limit):
         sub_urls = urls[thread_counter:thread_counter+thread_limit]
         threads = []
         for url in sub_urls:
-            threads.append(_threading.Thread(target=__grab_thread_wrapper, args=[url, result, args, kwargs, retries]))
+            threads.append(_threading.Thread(target=__grab_thread_wrapper, args=[url, timeout, result, args, kwargs]))
             threads[-1].start()
             _time.sleep(time_rest)
         
         for thread in threads:
             thread.join()
-        thread_counter += thread_limit
 
     __handle_tor_rotations(len(urls))
         
@@ -173,7 +170,7 @@ def get_local(filename:str, local_read_type:str='r', encoding:str='utf-8') -> st
         data = f.read()
     return data
 
-def download(url:str, local_filename:str=None, retries:int=2, ignore_tor_rotations:bool=False) -> None:
+def download(url:str, local_filename:str=None, ignore_tor_rotations:bool=False) -> None:
     """
     Downloads a file from a given URL and saves it locally.
 
@@ -182,7 +179,6 @@ def download(url:str, local_filename:str=None, retries:int=2, ignore_tor_rotatio
     Parameters:
         url (str): The URL of the file to be downloaded. Must include a file extension.
         local_filename (str, optional): The name to be used when saving the file locally. If none is provided, the function uses the filename from the URL. Must include a file extension if provided.
-        retries (int, optional): The number of retry attempts for the download in case of failure. Defaults to 5.
 
     Returns:
         None
@@ -195,8 +191,6 @@ def download(url:str, local_filename:str=None, retries:int=2, ignore_tor_rotatio
         raise TypeError("Argument 'url' must be a str")
     elif not (isinstance(local_filename, str) or local_filename is None):
         raise TypeError("Argument 'local_filename' must be a str")
-    elif not (isinstance(retries, int)):
-        raise TypeError("Argument 'retries' must be a int")    
 
     if local_filename is not None:
         if '.' not in local_filename:
@@ -209,7 +203,7 @@ def download(url:str, local_filename:str=None, retries:int=2, ignore_tor_rotatio
     # No need to handle tor roations here as it's already handled in get()
 
     # sends a request to get the file contents
-    response = get(url, retries=retries, ignore_tor_rotations=ignore_tor_rotations)
+    response = get(url, ignore_tor_rotations=ignore_tor_rotations)
 
     if response.status_code == 200:
         with open(local_filename, 'wb') as f:
@@ -217,7 +211,7 @@ def download(url:str, local_filename:str=None, retries:int=2, ignore_tor_rotatio
     else:
         raise Exception(f"Error fetching url. Status code - {response.status_code}")
 
-def download_async(urls:list, local_filenames:list=None, retries=2, thread_limit=500, time_rest=0) -> None:
+def download_async(urls:list, local_filenames:list=None, thread_limit=500, time_rest=0) -> None:
     """
     Executes multiple file downloads asynchronously from a list of given URLs and saves them locally.
 
@@ -226,7 +220,6 @@ def download_async(urls:list, local_filenames:list=None, retries=2, thread_limit
     Parameters:
         urls (list of str): The URLs of the files to be downloaded. Each URL must include a file extension.
         local_filename (list of str, optional): A list of names to be used when saving the files locally. If none is provided, the function uses the filename from each corresponding URL. Each filename must include a file extension if provided. Must be of same length as 'urls' if provided.
-        retries (int, optional): The number of retry attempts for the downloads in case of failure. Defaults to 5.
         thread_limit (int, optional): The maximum number of threads that will be spawned. 
         time_rest (int, optional): The amount of time to rest between the start of each download thread. Defaults to 0 seconds.
 
@@ -242,8 +235,6 @@ def download_async(urls:list, local_filenames:list=None, retries=2, thread_limit
         raise TypeError("Argument 'urls' must be an iterable object")
     elif (isinstance(local_filenames, (str, int, float, bool)) or local_filenames is None):
         raise TypeError("Argument 'local_filename' must be an iterable object")
-    elif not (isinstance(retries, int)):
-        raise TypeError("Argument 'retries' must be a int")
     elif not (isinstance(time_rest, int) or isinstance(time_rest, float)):
         raise TypeError("Argument 'time_rest' must be a int or float")
 
@@ -265,7 +256,7 @@ def download_async(urls:list, local_filenames:list=None, retries=2, thread_limit
         sub_local_filename= local_filenames[thread_counter:thread_counter+thread_limit]
 
         for url, name in zip(sub_urls, sub_local_filename):
-            threads.append(_threading.Thread(target=download, args=[url, name, retries, True]))
+            threads.append(_threading.Thread(target=download, args=[url, name, True]))
             threads[-1].start()
             _time.sleep(time_rest)
         
@@ -453,9 +444,9 @@ def scan_iprange(ips:str, port:int=80, timeout:int=1) -> list:
     return [key for key, value, in res.items() if value]
 
 # Helper function for get_async
-def __grab_thread_wrapper(url:str, payload:dict, args, kwargs, retries=2):
+def __grab_thread_wrapper(url:str, timeout:int, payload:dict, args, kwargs):
     try:
-        res = get(url, retries=retries, enable_js=False, ignore_tor_rotations=True, *args, **kwargs)
+        res = get(url, enable_js=False, ignore_tor_rotations=True, timeout=timeout, *args, **kwargs)
         payload[url] = res
     except Exception as err:
         _Warning.raiseWarning(f"Warning: Failed to grab {url} | {err}")

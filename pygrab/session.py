@@ -24,13 +24,13 @@ class Session(_requests.Session):
     def end_tor(self):
         self.__use_tor = False
 
-    def get(self, url:str, enable_js=False, **kwargs):
+    def get(self, url:str, enable_js=False, timeout=5, **kwargs):
         if enable_js:
             res = _js_scraper.pyppeteer_get(url, self.__use_tor)
             return self.__responseify_html(res)
         else:
             self.__append_tor_kwargs(kwargs)
-            return super().get(url, **kwargs)
+            return super().get(url, timeout=timeout, **kwargs)
     
     def get_async(self, urls, enable_js=False, thread_limit:int=None, time_rest:float=0, **kwargs) -> dict:
         if (isinstance(urls, (str, int, float, bool))):
