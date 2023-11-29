@@ -9,19 +9,21 @@ in handling various types of web requests, including asynchronous tasks,
 Javascript-enabled sites, and local requests.
 """
 
-
+# Local modules
 from .tor import Tor
 from .session import Session
 from .js_scraper import js_scraper as _js_scraper
 from .warning import Warning as _Warning
 from .tor_rotation import TorRotation as _TorRotation
+import autosession as _autosession
+
+# Libraries
 import requests as _requests
 import time as _time
 import socket as _socket
 import re as _re
 import threading as _threading
 import math as _math
-
 
 def get(url:str, enable_js:bool=False, ignore_tor_rotations:bool=False, timeout:int=None, *args, **kwargs): 
     """
@@ -459,6 +461,8 @@ def scan_iprange(ips:str, port:int=80, timeout:int=1) -> list:
 # Helper function for get_async
 def __grab_thread_wrapper(start, num, urls:list[str], timeout:int, payload:dict, args, kwargs):
     for i in range (start, start+num):
+        if i == len(urls):
+            break
         url = urls[i]
         try:
             res = get(url, enable_js=False, ignore_tor_rotations=True, timeout=timeout, *args, **kwargs)
