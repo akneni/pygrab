@@ -1,48 +1,14 @@
 from .warning import Warning
 from .session import Session
-from .pygrab import get
+from .pygrab import get as pygrabget
+import time
+import threading
 from urllib.parse import urlparse
 from collections import defaultdict
 
-class SessionDict:
-    session_dict = {}
 
-    def get_session(cls, domain):
-        if cls.session_dict.get(domain) is None:
-            cls.session_dict[domain] = Session()
-        return cls.session_dict[domain]
-
-class GroupedUrls:
-    def __init__(self, grouped_urls) -> None:
-        self.grouped_urls = grouped_urls
-        self.length = sum([len(v) for v in self.grouped_urls.values()])
-    
-    def values(self):
-        return self.grouped_urls.values()
-    def keys(self):
-        return self.grouped_urls.keys()
-    def items(self):
-        return self.grouped_urls.items()
-
-    def __getattribute__(self, __name: str):
-        return self.grouped_urls[__name]
-    
-    def __getitem__(self, x):
-        if x >= self.length:
-            raise IndexError(f'Index {x} out of bounds for length {self.length}')
-        while x < 0:
-            x = self.length+x
-        
-        counter = 0
-        for v in self.grouped_urls.values():
-            if counter + len(v) > x:
-                return v[x-counter]
-            else:
-                counter += len(v)
-    
-    def __len__(self):
-        return self.length
-
+CUTOFF = 2           # All domains with greater than CUTOFF urls will get autosessioned. 
+REQ_MULTIPLE = 10    # Each thread will create a session and send out REQ_MULTIPLE*batch_size requests
 
 def groupby_domain(urls:list[str]) -> dict[str:list[str]]:
     """
@@ -63,22 +29,67 @@ def groupby_domain(urls:list[str]) -> dict[str:list[str]]:
         domain = urlparse(url).netloc
         domain_groups[domain].append(url)
 
-    return GroupedUrls(dict(domain_groups))
+    return dict(domain_groups)
 
+def gen_partition(grouped_urls:dict[str:list[str]], cutoff:int, batch_size:int, req_multiple:int) -> list[tuple]:
+    res = []
 
-# Helper function for get_async with auto session support
-def grab_thread_wrapper_autosession(start, num, domain, urls:GroupedUrls, timeout:int, payload:dict, args, kwargs):
-    for i in range (start, start+num):
-        if i == len(urls[domain]):
-            break
+    last_domain = next(reversed(grouped_urls))
+    counter = 0
+    domain_iter = iter(grouped_urls)
+    curr_domain = next(domain_iter)
+    while 1:
+        if len(grouped_urls[curr_domain]) > cutoff:
+            res.append(
+                (counter, batch_size*req_multiple, curr_domain)
+            )
+            counter += batch_size*req_multiple
+        else:
+            res.append(
+                (counter, batch_size, curr_domain)
+            )
+            counter += batch_size
+        
+        if counter >= len(grouped_urls[curr_domain]):
+            if curr_domain == last_domain:
+                break
+            curr_domain = next(domain_iter)
+            counter = 0
+    return res
+
+def get_async_autosession(urls:list[str], timeout:int, time_rest:float, *args, **kwargs):
+    res = {url:None for url in urls}
+    grouped_urls = groupby_domain(urls)
+
+    partition = gen_partition(grouped_urls, CUTOFF, 1, REQ_MULTIPLE)
+    threads:list[threading.Thread] = []
+    for i in range(len(partition)):
+        threads.append(
+            threading.Thread(target=autosession_threadfunc, args=[partition[i], grouped_urls, timeout, res, args, kwargs])
+        )
+        threads[-1].start()
+        time.sleep(time_rest)
     
-        url = urls[domain][i]
+    for i in threads:
+        i.join()
+        
+    return res
+
+def autosession_threadfunc(partition, grouped_urls, timeout:int, payload:dict, args, kwargs):
+    start, num, domain = partition
+
+    if len(grouped_urls[domain]) > CUTOFF:
+        s = Session(use_tor=False)
+
+    for i in range(start, start+num):
+        if i >= len(grouped_urls[domain]):
+            break
+        url = grouped_urls[domain][i]
         try:
-            if len(urls[domain]) > 2:
-                s = SessionDict.get_session(domain)
-                payload[url] = s.get(url, enable_js=False, ignore_tor_rotations=True, timeout=timeout, *args, **kwargs)
+            if len(grouped_urls[domain]) > CUTOFF:
+                payload[url] = s.get(url, timeout=timeout, *args, **kwargs)
             else:
-                payload[url] = get(url, enable_js=False, ignore_tor_rotations=True, timeout=timeout, *args, **kwargs)
+                payload[url] = pygrabget(url, timeout=timeout, ignore_tor_rotations=True *args, **kwargs)
         except Exception as err:
             Warning.raiseWarning(f"Warning: Failed to grab {url} | {err}")
 
@@ -87,8 +98,9 @@ def grab_thread_wrapper_autosession(start, num, domain, urls:GroupedUrls, timeou
 
 
 
-
 """   
+
+Notes on auto session: 
 
 Using a single session for each domain results in a significant speed up for sync requests but results in no noticible speed up for async requests. 
 This may be because the connection (including the TLS handshake) is not preserves for a single session when threading is introduced. 
@@ -97,5 +109,11 @@ look at aiohttp for a solution to this
 
 UPDATE: aiohttp didn't work
 
+
+Creating a session in each individual thread seems to provide a reliable performence increase. 
+The optimal value for REQ_MULTIPLE seems to be 10. 
+The optimal value for REQ_MULTIPLE seems to be 3 when using the tor network. 
+
+This performence increase seems to only be reliable when requests are NOT being routed through the tor service. 
 
 """

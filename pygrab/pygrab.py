@@ -80,7 +80,7 @@ def get(url:str, enable_js:bool=False, ignore_tor_rotations:bool=False, timeout:
 
     raise ValueError(f"Invalid url or IP address: {url}")
     
-def get_async(urls:list, enable_js:bool=False, timeout:int=None, thread_limit:int=None, time_rest:float=0, *args, **kwargs) -> dict:
+def get_async(urls:list, enable_js:bool=False, timeout:int=None, time_rest:float=0, autosession:bool=None, thread_limit:int=None, *args, **kwargs) -> dict:
     """
     Gets multiple URLs asynchronously.
 
@@ -117,7 +117,18 @@ def get_async(urls:list, enable_js:bool=False, timeout:int=None, thread_limit:in
         thread_limit = 30 if enable_js else 800
     
     if timeout is None:
-        timeout = 20 if enable_js else 8
+        timeout = int( (25 if enable_js else 15) * (1.5 if Tor.tor_status() else 1) )
+    
+    # Autosession
+    if autosession is None:
+        autosession = (not enable_js) and (not Tor.tor_status())
+    elif autosession:
+        if enable_js: raise ValueError("autosession not supported for js-enabled scraping")
+        if Tor.tor_status(): raise NotImplementedError("autosession not supported for Tor (support coming soon)")
+    
+    if autosession:
+        return _autosession.get_async_autosession(urls, timeout=timeout, time_rest=time_rest, *args, **kwargs)
+
 
     # remove repeats to prevent possible DoS attacks
     urls = list(dict.fromkeys(list(urls)))
