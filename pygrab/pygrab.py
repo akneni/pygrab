@@ -20,6 +20,7 @@ import time as _time
 import socket as _socket
 import re as _re
 import threading as _threading
+import math as _math
 
 
 def get(url:str, enable_js:bool=False, ignore_tor_rotations:bool=False, timeout:int=None, *args, **kwargs): 
@@ -116,34 +117,32 @@ def get_async(urls:list, enable_js:bool=False, timeout:int=None, thread_limit:in
     if timeout is None:
         timeout = 20 if enable_js else 8
 
-
     # remove repeats to prevent possible DoS attacks
-    urls = list(set(urls))
+    urls = list(dict.fromkeys(list(urls)))
+    result = {url:None for url in urls}
     
     # Handle async js enabled scraping
     if enable_js:
         __handle_tor_rotations(0) # Don't increment the number of requests, but rotate connections if it's necessary
-        res = {}
         for thread_counter in range (0, len(urls), thread_limit):
             curr_urls = urls[thread_counter:thread_counter+thread_limit]
             if enable_js:
                 htmls:dict = _js_scraper.pyppeteer_get_async(curr_urls, timeout=timeout)
-                res.update( {k:__responseify_html(v) for k,v in htmls.items()} )
+                result.update( {k:__responseify_html(v) for k,v in htmls.items()} )
         __handle_tor_rotations(len(urls))
-        return res
+        return result
 
-    result = {}
-    thread_counter = 0
-    for thread_counter in range (0, len(urls), thread_limit):
-        sub_urls = urls[thread_counter:thread_counter+thread_limit]
-        threads = []
-        for url in sub_urls:
-            threads.append(_threading.Thread(target=__grab_thread_wrapper, args=[url, timeout, result, args, kwargs]))
-            threads[-1].start()
-            _time.sleep(time_rest)
+    batch_size = _math.ceil(len(urls)/thread_limit)
+    threads = []
+    for batch_num in range (batch_size):
+        threads.append(
+            _threading.Thread(target=__grab_thread_wrapper, args=[batch_num*batch_size, batch_size, urls, timeout, result, args, kwargs])
+        )
+        threads[-1].start()
+        _time.sleep(time_rest)
         
-        for thread in threads:
-            thread.join()
+    for thread in threads:
+        thread.join()
 
     __handle_tor_rotations(len(urls))
         
@@ -248,8 +247,8 @@ def download_async(urls:list, local_filenames:list=None, thread_limit=500, time_
         raise TypeError("Argument 'time_rest' must be a int or float")
 
     # remove repeats to prevent possible DoS attacks
-    urls = list(set(urls))
-    local_filenames = list(set(local_filenames))
+    urls = list(dict.fromkeys(list(urls)))
+    local_filenames = list(dict.fromkeys(list(local_filenames)))
 
     if local_filenames is not None:
         if len(urls) != len(local_filenames):
@@ -279,6 +278,7 @@ def download_async(urls:list, local_filenames:list=None, thread_limit=500, time_
     
 
 def head(url:str, **kwargs):
+    __handle_tor_rotations(1)
     __append_tor_kwargs(kwargs)
     return _requests.head(url, **kwargs)
 
@@ -286,7 +286,7 @@ def post(url:str, data=None, json=None, **kwargs):
     local_file_starts = ['./', 'C:', '/'] 
     if any([url.startswith(i) for i in local_file_starts]):
         raise ValueError("use post_local() for creation of local files.")
-    
+    __handle_tor_rotations(1)
     __append_tor_kwargs(kwargs)
     return _requests.post(url, data=data, json=json, **kwargs)
 
@@ -310,18 +310,22 @@ def post_local(filepath:str, data:str, local_save_type:str="w", encoding:str='ut
         f.write(str(data))
 
 def put(url, data=None, **kwargs):
+    __handle_tor_rotations(1)
     __append_tor_kwargs(kwargs)
     return _requests.put(url, data=data, **kwargs)
 
 def patch(url, data=None, **kwargs):
+    __handle_tor_rotations(1)
     __append_tor_kwargs(kwargs)
     return _requests.patch(url, data=data, **kwargs)
 
 def delete(url, **kwargs):
+    __handle_tor_rotations(1)
     __append_tor_kwargs(kwargs)
     return _requests.delete(url, **kwargs)
 
 def options(url, **kwargs):
+    __handle_tor_rotations(1)
     __append_tor_kwargs(kwargs)
     return _requests.options(url, **kwargs)
 
@@ -453,12 +457,14 @@ def scan_iprange(ips:str, port:int=80, timeout:int=1) -> list:
     return [key for key, value, in res.items() if value]
 
 # Helper function for get_async
-def __grab_thread_wrapper(url:str, timeout:int, payload:dict, args, kwargs):
-    try:
-        res = get(url, enable_js=False, ignore_tor_rotations=True, timeout=timeout, *args, **kwargs)
-        payload[url] = res
-    except Exception as err:
-        _Warning.raiseWarning(f"Warning: Failed to grab {url} | {err}")
+def __grab_thread_wrapper(start, num, urls:list[str], timeout:int, payload:dict, args, kwargs):
+    for i in range (start, start+num):
+        url = urls[i]
+        try:
+            res = get(url, enable_js=False, ignore_tor_rotations=True, timeout=timeout, *args, **kwargs)
+            payload[url] = res
+        except Exception as err:
+            _Warning.raiseWarning(f"Warning: Failed to grab {url} | {err}")
 
 # Helper function for scan_iprange
 def __scan_ip_wrapper(ip, port, timeout, res):
