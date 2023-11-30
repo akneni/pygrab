@@ -48,8 +48,8 @@ def get(url:str, enable_js:bool=False, ignore_tor_rotations:bool=False, timeout:
         raise TypeError("Argument 'url' must be a str")
     elif not (isinstance(enable_js, bool)):
         raise TypeError("Argument 'enable_js' must be a bool")
-    elif not (isinstance(enable_js, bool)):
-        raise TypeError("Argument 'enable_js' must be a bool")
+    elif not (isinstance(ignore_tor_rotations, bool)):
+        raise TypeError("Argument 'ignore_tor_rotations' must be a bool")
 
     if timeout is None:
         timeout = 20 if enable_js else 5
@@ -118,21 +118,20 @@ def get_async(urls:list, enable_js:bool=False, timeout:int=None, time_rest:float
     
     if timeout is None:
         timeout = int( (25 if enable_js else 15) * (1.5 if Tor.tor_status() else 1) )
-    
+
+    # remove repeats to prevent possible DoS attacks
+    urls = list(dict.fromkeys(list(urls)))
+    result = {url:None for url in urls}
+
     # Autosession
     if autosession is None:
         autosession = (not enable_js) and (not Tor.tor_status())
     elif autosession:
         if enable_js: raise ValueError("autosession not supported for js-enabled scraping")
         if Tor.tor_status(): raise NotImplementedError("autosession not supported for Tor (support coming soon)")
-    
     if autosession:
-        return _autosession.get_async_autosession(urls, timeout=timeout, time_rest=time_rest, *args, **kwargs)
-
-
-    # remove repeats to prevent possible DoS attacks
-    urls = list(dict.fromkeys(list(urls)))
-    result = {url:None for url in urls}
+        _autosession.get_async_autosession(urls, timeout=timeout, time_rest=time_rest, payload=result, *args, **kwargs)
+        return result
     
     # Handle async js enabled scraping
     if enable_js:
@@ -146,10 +145,11 @@ def get_async(urls:list, enable_js:bool=False, timeout:int=None, time_rest:float
         return result
 
     batch_size = _math.ceil(len(urls)/thread_limit)
-    threads = []
-    for batch_num in range (batch_size):
+    batch_num = _math.ceil(len(urls)/batch_size)
+    threads:list[_threading.Thread] = []
+    for batch_ind in range (batch_num):
         threads.append(
-            _threading.Thread(target=__grab_thread_wrapper, args=[batch_num*batch_size, batch_size, urls, timeout, result, args, kwargs])
+            _threading.Thread(target=__grab_thread_wrapper, args=[batch_ind*batch_size, batch_size, urls, timeout, result, args, kwargs])
         )
         threads[-1].start()
         _time.sleep(time_rest)

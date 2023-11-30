@@ -1,14 +1,53 @@
 from .warning import Warning
 from .session import Session
-from .pygrab import get as pygrabget
 import time
 import threading
+import requests
+import re
 from urllib.parse import urlparse
 from collections import defaultdict
 
 
 CUTOFF = 2           # All domains with greater than CUTOFF urls will get autosessioned. 
 REQ_MULTIPLE = 10    # Each thread will create a session and send out REQ_MULTIPLE*batch_size requests
+
+def pygrabget(url:str, timeout:int=None, *args, **kwargs): 
+    """
+    Gets the content at the specified URL.
+
+    Parameters:
+        url (str): The URL to get.
+        timeout (int, optional): The timeout in number of seconds
+        *args: Variable length argument list passed to requests.get.
+        **kwargs: Arbitrary keyword arguments passed to requests.get.
+
+    Returns:
+        requests.Response: The response from the server.
+
+    Raises:
+        TypeError: If any of the arguments are not of the desired data type.
+        ValueError: If the user is trying to read a local file
+    """
+    if not (isinstance(url, str)):
+        raise TypeError("Argument 'url' must be a str")
+    
+    timeout = 5 if timeout is None else timeout
+
+    local_file_starts = ['./', 'C:', '/'] 
+    url_file_starts = ['http', 'ftp:', 'mailto:']
+    if re.match(r'^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}(?::\d{1,5})?$', url):
+        url = "http://" + url
+    if any([url.startswith(i) for i in local_file_starts]):
+        raise ValueError ("Url must start with http. use get_local() for local requests.")
+    elif any([url.startswith(i) for i in url_file_starts]):
+        try:
+            return requests.get(url, timeout=timeout, *args, **kwargs)
+        except requests.exceptions.InvalidSchema as err:
+            if 'Missing dependencies for SOCKS support'.lower() in str(err).lower():
+                raise ModuleNotFoundError("Required module 'PySocks' not found.")
+            raise requests.exceptions.InvalidSchema(err)
+
+    raise ValueError(f"Invalid url or IP address: {url}")
 
 def groupby_domain(urls:list[str]) -> dict[str:list[str]]:
     """
@@ -57,23 +96,21 @@ def gen_partition(grouped_urls:dict[str:list[str]], cutoff:int, batch_size:int, 
             counter = 0
     return res
 
-def get_async_autosession(urls:list[str], timeout:int, time_rest:float, *args, **kwargs):
-    res = {url:None for url in urls}
+def get_async_autosession(urls:list[str], timeout:int, time_rest:float, payload:dict, *args, **kwargs):
     grouped_urls = groupby_domain(urls)
 
     partition = gen_partition(grouped_urls, CUTOFF, 1, REQ_MULTIPLE)
     threads:list[threading.Thread] = []
     for i in range(len(partition)):
         threads.append(
-            threading.Thread(target=autosession_threadfunc, args=[partition[i], grouped_urls, timeout, res, args, kwargs])
+            threading.Thread(target=autosession_threadfunc, args=[partition[i], grouped_urls, timeout, payload, args, kwargs])
         )
         threads[-1].start()
         time.sleep(time_rest)
     
     for i in threads:
         i.join()
-        
-    return res
+
 
 def autosession_threadfunc(partition, grouped_urls, timeout:int, payload:dict, args, kwargs):
     start, num, domain = partition
@@ -89,7 +126,7 @@ def autosession_threadfunc(partition, grouped_urls, timeout:int, payload:dict, a
             if len(grouped_urls[domain]) > CUTOFF:
                 payload[url] = s.get(url, timeout=timeout, *args, **kwargs)
             else:
-                payload[url] = pygrabget(url, timeout=timeout, ignore_tor_rotations=True *args, **kwargs)
+                payload[url] = pygrabget(url, timeout=timeout, *args, **kwargs)
         except Exception as err:
             Warning.raiseWarning(f"Warning: Failed to grab {url} | {err}")
 
