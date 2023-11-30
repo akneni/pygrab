@@ -15,7 +15,7 @@ from .session import Session
 from .js_scraper import js_scraper as _js_scraper
 from .warning import Warning as _Warning
 from .tor_rotation import TorRotation as _TorRotation
-import .autosession as _autosession
+from .autosession import autosession as _autosession
 
 # Libraries
 import requests as _requests
