@@ -1,6 +1,15 @@
 from .warning import Warning
 from .tor import Tor
-from pyppeteer import launch as _launch
+
+# Include this because pyppeteer is often a buggy library and will often crash on import
+# Switch to new library soon
+try:
+    from pyppeteer import launch as _launch
+    pyppeteer_working = True
+except Exception:
+    pyppeteer_working = False
+
+
 import asyncio as _asyncio
 import atexit as _atexit
 import nest_asyncio as _nest_asyncio
@@ -60,6 +69,8 @@ class js_scraper:
     @classmethod
     def pyppeteer_get(cls, url, use_tor:bool=None, timeout:int=20):
         # Test it
+        if not pyppeteer_working:
+            return None
         loop = _asyncio.get_event_loop()
         result = loop.run_until_complete(cls.__pyppeteer_kernel(url, use_tor, timeout))
         return result
@@ -90,4 +101,6 @@ class js_scraper:
 
     @classmethod
     def pyppeteer_get_async(cls, urls, use_tor=None, timeout:int=20) -> dict:
+        if not pyppeteer_working:
+            return None
         return _asyncio.run(cls.scrape_all(urls, use_tor=use_tor, timeout=timeout))
