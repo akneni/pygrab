@@ -1,5 +1,3 @@
 /pygrab/tester.*
 /pygrab/test.*
 /pygrab/unit-tester.*
-/pygrab/rust_dependencies/*.dll
-/pygrab/rust_dependencies/*.so
