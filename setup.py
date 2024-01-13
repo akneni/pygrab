@@ -14,6 +14,7 @@ setup(
     author='Anish Kanthamneni',
     author_email='akneni@gmail.com',
     packages=find_packages(),
+    include_package_data=True,
     install_requires=[
         'requests',
         'pyppeteer',

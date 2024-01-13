@@ -1,0 +1,2 @@
+include pygrab/rust_dependencies/rust_lib.so
+include pygrab/rust_dependencies/rust_lib.dll
