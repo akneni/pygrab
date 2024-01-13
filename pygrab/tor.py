@@ -12,6 +12,7 @@ class Tor():
     __tor_path = None
     __tor_process = None
     __override_service_err = False
+    __num_req = {'curr_req': None, 'max_req': None}
     __os = _platform.system()
 
     # socks proxies for tor
@@ -20,16 +21,8 @@ class Tor():
         'https': 'socks5h://127.0.0.1:9050'
     }
 
-    # Default headers to be usd when tor is enabled
-    tor_headers = {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537',
-        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-        'Accept-Language': 'en-US,en;q=0.5',
-        'Referer': 'https://www.google.com',
-    }
-
     @classmethod
-    def start_tor(cls, verbose:int=0, force_start=False):
+    def start_tor(cls, verbose:int=0, force_start=False) -> None:
         if cls.__tor_service_enabled:
             cls.end_tor()
 
@@ -88,11 +81,12 @@ class Tor():
 
 
     @classmethod
-    def end_tor(cls):
+    def end_tor(cls) -> None:
         if cls.__tor_process is not None:
             cls.__tor_process.terminate()
             cls.__tor_process.wait()
             cls.__tor_service_enabled = False
+        cls.__num_req = {'curr_req': None, 'max_req': None}
 
     @classmethod
     def tor_status(cls) -> bool:
@@ -103,7 +97,7 @@ class Tor():
         return cls.__override_service_err
     
     @classmethod
-    def load_tor_dependencies(cls, filepath:str):
+    def load_tor_dependencies(cls, filepath: str) -> None:
         if cls.__os == 'Linux':
             raise DependencyLoadError(" If you're on linux, run `sudo apt-get` ")
 
@@ -121,6 +115,28 @@ class Tor():
                 f.write(data)
             return
         raise AttributeError("load_tor_dependencies only supports file types of '.tar.gz' and 'tor.exe'")
+
+    @classmethod
+    def increment_roation_counter(cls, num_req: int = 1) -> None:
+        if cls.__num_req['max_req'] is None: return
+        cls.__num_req['curr_req'] += num_req
+        if cls.__num_req['curr_req'] >= cls.__num_req['max_req']:
+            cls.start_tor()
+            cls.__num_req['curr_req'] = 0
+
+    @classmethod
+    def rotate_tor(cls, num_req_per_rotation: int) -> None:
+        if cls.__override_service_err:
+            raise Exception("Cannot rotate tor connections when an override is forced. End the other tor service in order to rotate connections.")
+        if not cls.__tor_service_enabled:
+            cls.start_tor()
+        if num_req_per_rotation < 1:
+            raise ValueError("`num_req_per_rotation` must be positive")
+        cls.__num_req = {'curr_req': 0, 'max_req': num_req_per_rotation}
+
+    @classmethod
+    def end_tor_rotation(cls) -> None:
+        cls.__num_req = {'curr_req': None, 'max_req': None}
 
     @classmethod
     def __tor_path_init(cls):

@@ -1,6 +1,6 @@
 # PyGrab
 
-PyGrab is a Python library for making HTTP requests. It is designed to be fully interoperable with the popular `requests` package in Python. All functions in PyGrab that make HTTP requests return `requests.Response` objects, making it easy to integrate into existing projects that use `requests`.
+PyGrab is a simple and performant Python library for making HTTP requests written in rust. It is designed to be fully interoperable with the popular `requests` package in Python.
 
 
 ## References
@@ -13,11 +13,15 @@ PyGrab is a Python library for making HTTP requests. It is designed to be fully 
 
 - **Simple**: PyGrab's API is designed to be straightforward and easy to use. If you're familiar with `requests`, you'll feel right at home.
 - **Flexible**: Whether you need to make a simple GET request, post data to a server, or download a file, PyGrab has you covered.
+- **Performant**: With its Rust-powered backend, PyGrab offers enhanced performance for CPU-bound tasks, providing faster data decompression, thread handling, and network handling..
 - **Asynchronous Support**: PyGrab includes functions for making asynchronous HTTP requests, allowing you to efficiently grab data from multiple URLs at once.
 - **JavaScript Support**: PyGrab can render JavaScript-enabled websites, allowing you to grab data from dynamic web pages.
 - **Interface with Tor Network**: PyGrab includes built-in support for routing requests through the tor network.
 - **Automated IP Rotation**: PyGrab includes built-in support for rotating connections to the Tor Network.
 
+
+## Limitationa
+- PyGrab is only supported on windows an linux currently. 
 
 ## Installation
 
@@ -38,7 +42,7 @@ response = pygrab.get('http://example.com')
 print(response.text)
 ```
 
-In this example, `response` is a `requests.Response` object. You can use it just like you would in `requests`.
+In this example, `response` is syntactically similar to the `requests.Response` object. You can use it just like you would in `requests`.
 
 Here's an example of how to use PyGrab to make asynchronous GET requests through the Tor Network:
 
@@ -54,7 +58,7 @@ for response in responses.values():
     print(response.text)
 ```
 
-In this example, `responses` is a dictionary of urls matched to their respective `requests.Response` objects. Each response corresponds to the URL at the same index in the `urls` list.
+In this example, `responses` is a dictionary of urls matched to their respective `pygrab.HttpResponse` objects. Each response corresponds to the URL at the same index in the `urls` list.
 
 
 ## Contributing

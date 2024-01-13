@@ -14,25 +14,27 @@ from .tor import Tor
 from .session import Session
 from .js_scraper import js_scraper as _js_scraper
 from .warning import Warning as _Warning
-from .tor_rotation import TorRotation as _TorRotation
-from .autosession import autosession as _autosession
+from .rust_dependencies.rust_lib import SessionRs, HttpResponse
 
 # Libraries
-import requests as _requests
-import time as _time
-import socket as _socket
 import re as _re
-import threading as _threading
-import math as _math
 
-def get(url:str, enable_js:bool=False, ignore_tor_rotations:bool=False, timeout:int=None, *args, **kwargs): 
+__DEFAULT_HEADERS = {
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/88.0.4324.150 Safari/537.36",
+    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8",
+    "Accept-Language": "en-US,en;q=0.9",
+    "Accept-Encoding": "gzip, br",
+    "Upgrade-Insecure-Requests": "1",
+    "Cache-Control": "max-age=0",
+}
+
+def get(url:str, enable_js:bool=False, timeout:int=None, override_default_headers=False, *args, **kwargs) -> HttpResponse: 
     """
     Gets the content at the specified URL.
 
     Parameters:
         url (str): The URL to get.
         enable_js (bool, optional): Whether to use a headless browser to scrape a url.
-        ignore_tor_rotations (bool, optional): Whether to count this request when calculating tor rotations
         timeout (int, optional): The timeout in number of seconds
         *args: Variable length argument list passed to requests.get.
         **kwargs: Arbitrary keyword arguments passed to requests.get.
@@ -45,42 +47,41 @@ def get(url:str, enable_js:bool=False, ignore_tor_rotations:bool=False, timeout:
         ValueError: If the user is trying to read a local file
     """
     if not (isinstance(url, str)):
-        raise TypeError("Argument 'url' must be a str")
-    elif not (isinstance(enable_js, bool)):
-        raise TypeError("Argument 'enable_js' must be a bool")
-    elif not (isinstance(ignore_tor_rotations, bool)):
-        raise TypeError("Argument 'ignore_tor_rotations' must be a bool")
+        raise TypeError("Argument `url` must be a str")
+    if not (isinstance(enable_js, bool)):
+        raise TypeError("Argument `enable_js` must be a bool")
 
     if timeout is None:
         timeout = 20 if enable_js else 5
 
-    local_file_starts = ['./', 'C:', '/'] 
-    url_file_starts = ['http', 'ftp:', 'mailto:']
     if _re.match(r'^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}(?::\d{1,5})?$', url):
         url = "http://" + url
+    local_file_starts = ['./', 'C:', '/'] 
     if any([url.startswith(i) for i in local_file_starts]):
-        raise ValueError ("Url must start with http. use get_local() for local requests.")
-    elif any([url.startswith(i) for i in url_file_starts]):
-        # Handles rotating tor connections
-        if not ignore_tor_rotations:
-            __handle_tor_rotations()
-        
-        # Handle Js enables requests
-        if enable_js:
-            res = _js_scraper.pyppeteer_get(url, timeout=timeout)
-            return __responseify_html(res)
-        else:
-            __append_tor_kwargs(kwargs)
-            try:
-                return _requests.get(url, timeout=timeout, *args, **kwargs)
-            except _requests.exceptions.InvalidSchema as err:
-                if 'Missing dependencies for SOCKS support'.lower() in str(err).lower():
-                    raise ModuleNotFoundError("Required module 'PySocks' not found.")
-                raise _requests.exceptions.InvalidSchema(err)
+        raise ValueError ("Url must start with http. use `get_local()` for local requests.")
 
-    raise ValueError(f"Invalid url or IP address: {url}")
+    # Handles rotating tor connections
+    Tor.increment_roation_counter()
     
-def get_async(urls:list, enable_js:bool=False, timeout:int=None, time_rest:float=0, autosession:bool=None, thread_limit:int=None, *args, **kwargs) -> dict:
+    # Handle Js enables requests
+    if enable_js:
+        res = _js_scraper.pyppeteer_get(url, timeout=timeout)
+        return HttpResponse([i for i in res.encode('utf-8')], 200, {})
+    else:
+        proxy = __set_proxy(kwargs)
+        headers = __set_headers(kwargs) if not override_default_headers else kwargs.get('headers', {})
+        client = SessionRs(timeout, headers, proxy)
+        return client.get(url)
+    
+def get_async(
+    urls:list, 
+    enable_js:bool=False, 
+    timeout:int=None, 
+    thread_limit:int=None, 
+    override_default_headers:bool=False, 
+    **kwargs
+) -> dict[str:HttpResponse]:
+
     """
     Gets multiple URLs asynchronously.
 
@@ -101,64 +102,44 @@ def get_async(urls:list, enable_js:bool=False, timeout:int=None, time_rest:float
     Raises:
         TypeError: If any of the arguments are not of the desired data type.
     """
-
-    if (isinstance(urls, (str, int, float, bool))):
+    try:
+        urls = list(urls)
+    except Exception:
         raise TypeError("Argument 'urls' must be an iterable object")
-    elif not (isinstance(enable_js, bool)):
+    if not (isinstance(enable_js, bool)):
         raise TypeError("Argument 'enable_js' must be a bool")
-    elif not (isinstance(time_rest, int) or isinstance(time_rest, float)):
-        raise TypeError("Argument 'time_rest' must be a int or float")
-    elif not (isinstance(thread_limit, int) or (thread_limit is None)):
+    if not (isinstance(thread_limit, (int)) or thread_limit is None):
         raise TypeError("Argument 'thread_limit' must be a int")
-    elif not (isinstance(timeout, int) or isinstance(timeout, float) or (thread_limit is None)):
+    if not (isinstance(timeout, (int, float)) or timeout is None):
         raise TypeError("Argument 'timeout' must be a int or float")
     
     if thread_limit is None:
-        thread_limit = 30 if enable_js else 800
+        thread_limit = 30 if enable_js else 200
     
     if timeout is None:
-        timeout = int( (25 if enable_js else 15) * (1.5 if Tor.tor_status() else 1) )
+        timeout = int( (25 if enable_js else 8) * (1.75 if Tor.tor_status() else 1) )
 
     # remove repeats to prevent possible DoS attacks
-    urls = list(dict.fromkeys(list(urls)))
-    result = {url:None for url in urls}
+    urls = list(dict.fromkeys(urls))
 
-    # Autosession
-    if autosession is None:
-        autosession = (not enable_js) and (not Tor.tor_status())
-    elif autosession:
-        if enable_js: raise ValueError("autosession not supported for js-enabled scraping")
-        if Tor.tor_status(): raise NotImplementedError("autosession not supported for Tor (support coming soon)")
-    if autosession:
-        _autosession.get_async_autosession(urls, timeout=timeout, time_rest=time_rest, payload=result, *args, **kwargs)
-        return result
-    
     # Handle async js enabled scraping
     if enable_js:
-        __handle_tor_rotations(0) # Don't increment the number of requests, but rotate connections if it's necessary
+        # Don't increment the number of requests, but rotate connections if it's necessary
+        Tor.increment_roation_counter(0) 
+        result = {url:None for url in urls}
         for thread_counter in range (0, len(urls), thread_limit):
             curr_urls = urls[thread_counter:thread_counter+thread_limit]
             if enable_js:
                 htmls:dict = _js_scraper.pyppeteer_get_async(curr_urls, timeout=timeout)
-                result.update( {k:__responseify_html(v) for k,v in htmls.items()} )
-        __handle_tor_rotations(len(urls))
+                result.update( {k:HttpResponse([i for i in v.encode('utf-8')], 200, {}) for k,v in htmls.items()} )
+        Tor.increment_roation_counter(len(urls))
         return result
 
-    batch_size = _math.ceil(len(urls)/thread_limit)
-    batch_num = _math.ceil(len(urls)/batch_size)
-    threads:list[_threading.Thread] = []
-    for batch_ind in range (batch_num):
-        threads.append(
-            _threading.Thread(target=__grab_thread_wrapper, args=[batch_ind*batch_size, batch_size, urls, timeout, result, args, kwargs])
-        )
-        threads[-1].start()
-        _time.sleep(time_rest)
-        
-    for thread in threads:
-        thread.join()
-
-    __handle_tor_rotations(len(urls))
-        
+    headers = __set_headers(kwargs) if not override_default_headers else kwargs.get('headers', {})
+    proxy = __set_proxy(kwargs)
+    client = SessionRs(timeout, headers, proxy)
+    result = client.get_async(urls, thread_limit, _Warning.warning_settings)
+    Tor.increment_roation_counter(len(urls))
     return result
 
 def get_local(filename:str, local_read_type:str='r', encoding:str='utf-8') -> str:
@@ -186,12 +167,11 @@ def get_local(filename:str, local_read_type:str='r', encoding:str='utf-8') -> st
     if not (isinstance(encoding, str)):
         raise TypeError("Argument 'encoding' must be a str")
 
-
     with open(filename, local_read_type, encoding=encoding) as f:
         data = f.read()
     return data
 
-def download(url:str, local_filename:str=None, ignore_tor_rotations:bool=False) -> None:
+def download(url:str, local_filename:str, timeout:float=5) -> None:
     """
     Downloads a file from a given URL and saves it locally.
 
@@ -199,8 +179,8 @@ def download(url:str, local_filename:str=None, ignore_tor_rotations:bool=False) 
 
     Parameters:
         url (str): The URL of the file to be downloaded. Must include a file extension.
-        local_filename (str, optional): The name to be used when saving the file locally. If none is provided, the function uses the filename from the URL. Must include a file extension if provided.
-
+        local_filename (str): The name to be used when saving the file locally. If none is provided, the function uses the filename from the URL. Must include a file extension if provided.
+        timeout: (float, optional): The number of seconds the request should timeout after
     Returns:
         None
 
@@ -210,29 +190,15 @@ def download(url:str, local_filename:str=None, ignore_tor_rotations:bool=False) 
     """
     if not (isinstance(url, str)):
         raise TypeError("Argument 'url' must be a str")
-    elif not (isinstance(local_filename, str) or local_filename is None):
+    elif not (isinstance(local_filename, str)):
         raise TypeError("Argument 'local_filename' must be a str")
-
-    if local_filename is not None:
-        if '.' not in local_filename:
-            raise ValueError("Argument 'local_filename' must have file extention.")
-    elif '/' in url:
-        local_filename = url.split('/')[-1]
-    else:
-        local_filename=url
     
-    # No need to handle tor roations here as it's already handled in get()
-
     # sends a request to get the file contents
-    response = get(url, ignore_tor_rotations=ignore_tor_rotations)
+    client = SessionRs(timeout, __set_headers({}), __set_proxy({}))
+    client.download(url, local_filename)
 
-    if response.status_code == 200:
-        with open(local_filename, 'wb') as f:
-            f.write(response.content)
-    else:
-        raise Exception(f"Error fetching url. Status code - {response.status_code}")
 
-def download_async(urls:list, local_filenames:list=None, thread_limit=500, time_rest=0) -> None:
+def download_async(urls:(list, dict), local_filenames:list=None, thread_limit:int=50, timeout:float=12.0, time_rest:float=0) -> None:
     """
     Executes multiple file downloads asynchronously from a list of given URLs and saves them locally.
 
@@ -251,58 +217,73 @@ def download_async(urls:list, local_filenames:list=None, thread_limit=500, time_
         TypeError: If any of the arguments are not of the desired data type.
         ValueError: If a 'local_filenames' is specified but does not contain a file extension.
     """
-    # Check argument types
-    if (isinstance(urls, (str, int, float, bool))):
-        raise TypeError("Argument 'urls' must be an iterable object")
-    elif (isinstance(local_filenames, (str, int, float, bool)) or local_filenames is None):
-        raise TypeError("Argument 'local_filename' must be an iterable object")
-    elif not (isinstance(time_rest, int) or isinstance(time_rest, float)):
-        raise TypeError("Argument 'time_rest' must be a int or float")
-
-    # remove repeats to prevent possible DoS attacks
-    urls = list(dict.fromkeys(list(urls)))
-    local_filenames = list(dict.fromkeys(list(local_filenames)))
-
+    # Validate argument 
     if local_filenames is not None:
         if len(urls) != len(local_filenames):
             raise ValueError("Lists 'url' and 'local_filenames' must be of equal length.")
-    else:
-        local_filenames = [None for _ in range(len(urls))]
+    try:
+        # Removes repeats to avoid accedental DoS
+        # Maintains paralellism between lists
+        if not isinstance(urls, dict):
+            urls = {url:filename for url, filename in zip(urls, local_filenames)}
+        urls, local_filenames = zip(*urls.items())
+    except Exception:
+        raise TypeError("`urls` must be list of dict and `local_filenames` must be list (or None if url is dict)")
+    if not (isinstance(timeout, (int, float))):
+        raise TypeError("Argument 'timeout' must be a int or float")
+    if not (isinstance(time_rest, (int, float))):
+        raise TypeError("Argument 'time_rest' must be a int or float")
 
-    # Uses the threading module to asynchrounously download the files
-    thread_counter = 0
-    while (thread_counter < len(urls)):
-        threads = []
-        sub_urls = urls[thread_counter:thread_counter+thread_limit]
-        sub_local_filename= local_filenames[thread_counter:thread_counter+thread_limit]
-
-        for url, name in zip(sub_urls, sub_local_filename):
-            threads.append(_threading.Thread(target=download, args=[url, name, True]))
-            threads[-1].start()
-            _time.sleep(time_rest)
-        
-        for thread in threads:
-            thread.join()
-        thread_counter += thread_limit
+    # Uses rust dependencies to asynchrounously download files
+    client = SessionRs(timeout, __set_headers({}), __set_proxy({}))
+    client.download_async(urls, local_filenames, thread_limit, _Warning.warning_settings)
 
     # If tor rotations isn't None, then make this entire batch of requests with one connection
     # and then the connection to be changed on the next request
-    __handle_tor_rotations(len(urls))
+    Tor.increment_roation_counter(len(urls))
     
 
-def head(url:str, **kwargs):
-    __handle_tor_rotations(1)
-    __append_tor_kwargs(kwargs)
-    return _requests.head(url, **kwargs)
+def head(url:str, timeout:float=5, **kwargs) -> HttpResponse:
+    Tor.increment_roation_counter()
+    headers = __set_headers(kwargs)
+    proxy = __set_proxy(kwargs)
+    client = SessionRs(timeout, headers, proxy)
+    return client.head(url)
 
-def post(url:str, data=None, json=None, **kwargs):
+def post(url:str, data:(str, bytes)=None, json:dict=None, timeout:float=5, **kwargs) -> HttpResponse:
     local_file_starts = ['./', 'C:', '/'] 
     if any([url.startswith(i) for i in local_file_starts]):
         raise ValueError("use post_local() for creation of local files.")
-    __handle_tor_rotations(1)
-    __append_tor_kwargs(kwargs)
-    return _requests.post(url, data=data, json=json, **kwargs)
+    Tor.increment_roation_counter()
+    headers = __set_headers(kwargs)
+    proxy = __set_proxy(kwargs)
+    client = SessionRs(timeout, headers, proxy)
+    if isinstance(data, str):
+        return client.post(url, data)
+    if isinstance(json, dict):
+        json = {str(k): str(v) for k, v in json.items()}
+        return client.post_json(url, json)
+    if isinstance(data, dict):
+        data = {str(k): str(v) for k, v in data.items()}
+        return client.post_json(url, data)
+    if isinstance(data, bytes):
+        return client.post_bytes(url, [i for i in data])
 
+def post_async(urls:list[str], data:list[(str, dict, bytes)], timeout:float=5, **kwargs):
+    # Remove repeats to avoid accedental DoS
+    # Maintain paralellism between lists
+    urls, data = zip(*{u:d for u, d in zip(urls, data)})
+
+    Tor.increment_roation_counter(len(urls))
+    headers = __set_headers(kwargs)
+    proxy = __set_proxy(kwargs)
+    client = SessionRs(timeout, headers, proxy)
+    if isinstance(data[0], str):
+        return client.post_async(urls, data)
+    if isinstance(data[0], dict):
+        return client.post_json_async(urls, data)
+    if isinstance(data[0], bytes):
+        return client.post_bytes(urls, [[j for j in bytes_data] for bytes_data in data])
 
 def post_local(filepath:str, data:str, local_save_type:str="w", encoding:str='utf-8') -> None:
     """
@@ -322,30 +303,32 @@ def post_local(filepath:str, data:str, local_save_type:str="w", encoding:str='ut
     with open(filepath, local_save_type, encoding=encoding) as f:
         f.write(str(data))
 
-def put(url, data=None, **kwargs):
-    __handle_tor_rotations(1)
-    __append_tor_kwargs(kwargs)
-    return _requests.put(url, data=data, **kwargs)
+def put(url, data:str=None, timeout:float=5, **kwargs):
+    Tor.increment_roation_counter()
+    headers = __set_headers(kwargs)
+    proxy = __set_proxy(kwargs)
+    client = SessionRs(timeout, headers, proxy)
+    return client.put(url, data)
 
 def patch(url, data=None, **kwargs):
-    __handle_tor_rotations(1)
-    __append_tor_kwargs(kwargs)
-    return _requests.patch(url, data=data, **kwargs)
+    raise NotImplementedError("Not yet implemented in rust backend")
+    Tor.increment_roation_counter()
 
-def delete(url, **kwargs):
-    __handle_tor_rotations(1)
-    __append_tor_kwargs(kwargs)
-    return _requests.delete(url, **kwargs)
+def delete(url, timeout:float=5, **kwargs):
+    Tor.increment_roation_counter()
+    headers = __set_headers(kwargs)
+    proxy = __set_proxy(kwargs)
+    client = SessionRs(timeout, headers, proxy)
+    return client.delete(url)
 
-def options(url, **kwargs):
-    __handle_tor_rotations(1)
-    __append_tor_kwargs(kwargs)
-    return _requests.options(url, **kwargs)
+def options(url, timeout:float=5, **kwargs):
+    Tor.increment_roation_counter()
+    headers = __set_headers(kwargs)
+    proxy = __set_proxy(kwargs)
+    client = SessionRs(timeout, headers, proxy)
+    return client.options(url)
 
-def tor_status() -> bool:
-    return Tor.tor_status()
-
-def display_tor_status() -> None:
+def display_public_status() -> None:
     connection_data = get('http://ip-api.com/json').json()
     print("Tor Service Enabled:  ", Tor.tor_status())
     print("Public Ip Address:    ", connection_data['query'])
@@ -356,164 +339,20 @@ def display_tor_status() -> None:
     if 'city' in connection_data.keys():
         print("City:                 ", connection_data['city'])
 
-def rotate_tor(num_req_per_rotation):
-    if Tor.override_status():
-        raise Exception("Cannot rotate tor connections when an override is forced. End the other tor service in order to rotate connections.")
-    if not Tor.tor_status():
-        Tor.start_tor()
-    if num_req_per_rotation < 1:
-        _TorRotation.Tor_Reconnect = None
-    _TorRotation.Tor_Reconnect = [num_req_per_rotation, num_req_per_rotation]
-
-def end_rotate_tor():
-    _TorRotation.Tor_Reconnect = None
-
-def warn_settings(warn:bool):
+def warn_settings(warn: bool) -> True:
     if not isinstance(warn, bool):
-        raise TypeError("Argument 'warn' bust be a bool")
+        raise TypeError("Argument 'warn' must be a bool")
     _Warning.warning_settings = warn
 
-def scan_ip(ip:str, port:int=80, timeout:int=1) -> bool:
-    """
-    Scans a given IP address to check if it's online.
+def __set_proxy(kwargs) -> (str, None):
+    # Defaults to user specified proxies and headers over those defined by the tor interface
+    if 'proxies' in kwargs.keys():
+        try: return kwargs['proxies']['http']
+        except: raise ValueError("proxies incorrectly formatted. {'http': '0.0.0.0:8080', 'https': '0.0.0.0:8080'}")
+    elif Tor.tor_status():
+        return Tor.tor_proxies['http']
 
-    This function attempts to connect to a specified IP address and port, returning True if the connection is successful
-    and False otherwise.
-
-    Args:
-        ip (str): The IP address to scan, in the format '10.0.0.3'.
-        port (int, optional): The port number to connect to. Defaults to 80.
-        timeout (int, optional): The timeout in seconds for the connection attempt. Defaults to 1.
-
-    Returns:
-        bool: True if the IP address is online, False otherwise.
-
-    Raises:
-        TypeError: If the 'ip' argument is not a string.
-        ValueError: If the 'ip' argument is not in the correct format or if an invalid IP address is provided.
-    """
-    if not isinstance(ip, str):
-        raise TypeError("Argument 'ip' must be a string.")
-
-    pattern = r'^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$'
-    if not _re.match(pattern, ip):
-        raise ValueError("Argument 'ip' must be in the format 10.0.0.3")
-
-    if Tor.tor_status():
-        _Warning.raiseWarning("TorNotUtilizedWarning: Note that the tor network will not be usd when scanning ips")
-
-    try:
-        session = _socket.socket(_socket.AF_INET, _socket.SOCK_STREAM)
-        session.settimeout(timeout)
-        session.connect((ip, port))
-        session.close()
-        return True
-    except (_socket.timeout, ConnectionRefusedError):
-        return False
-    except OSError:
-        raise ValueError("Invalid ip address.")
-
-def scan_iprange(ips:str, port:int=80, timeout:int=1) -> list:
-    """
-    Scans a range of IP addresses to check which ones are online.
-
-    This function scans a specified range of IP addresses, returning a list of those that are online.
-
-    Args:
-        ips (str): The IP address range to scan, in the format '10.0.0.1-255'.
-        port (int, optional): The port number to connect to. Defaults to 80.
-        timeout (int, optional): The timeout in seconds for the connection attempt. Defaults to 1.
-
-    Returns:
-        list: A list of IP addresses that are online within the specified range.
-
-    Raises:
-        TypeError: If the 'ips' argument is not a string.
-        ValueError: If the 'ips' argument is not in the correct format or if the IP range start is greater or equal to 255.
-    """
-
-    if not isinstance(ips, str):
-        raise TypeError("Argument 'ips' must be a string.")
-
-    ips = ips.replace(' ', '')
-    pattern = r'^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}-\d{1,3}$'
-    if not _re.match(pattern, ips):
-        raise ValueError("Argument 'ips' must be in the format 10.0.0.1-255")
-
-    first_three = ips.replace(ips.split('.')[-1], '')
-    start, end = ips.split('.')[-1].split('-')
-    ip_range = [first_three + str(i) for i in range (int(start), int(end)+1)]
-
-    if int(start) >= 255:
-        raise ValueError('Ip range must start below 255.')
-
-    if Tor.tor_status():
-        _Warning.raiseWarning("TorNotUtilizedWarning: Note that the tor network will not be usd when scanning ips")
-
-    reset_warn = _Warning.warning_settings
-    _Warning.warning_settings = False # stifle warnings while threading
-    
-    threads = []
-    res = {i:False for i in ip_range}
-    for i in ip_range:
-        threads.append(
-            _threading.Thread(target=__scan_ip_wrapper, args=[i, port, timeout, res])
-        )
-        threads[-1].start()
-    
-    for i in threads:
-        i.join()
-    
-    _Warning.warning_settings = reset_warn
-
-    
-    return [key for key, value, in res.items() if value]
-
-# Helper function for get_async
-def __grab_thread_wrapper(start, num, urls:list[str], timeout:int, payload:dict, args, kwargs):
-    for i in range (start, start+num):
-        if i == len(urls):
-            break
-        url = urls[i]
-        try:
-            res = get(url, enable_js=False, ignore_tor_rotations=True, timeout=timeout, *args, **kwargs)
-            payload[url] = res
-        except Exception as err:
-            _Warning.raiseWarning(f"Warning: Failed to grab {url} | {err}")
-
-# Helper function for scan_iprange
-def __scan_ip_wrapper(ip, port, timeout, res):
-    try:
-        res[ip] = scan_ip(ip=ip, port=port, timeout=timeout)
-    except ValueError:
-        pass
-
-def __handle_tor_rotations(num_req=1):
-    # Handles rotating tor connections
-    if _TorRotation.Tor_Reconnect is not None:
-        if _TorRotation.Tor_Reconnect[0] <= 0:
-            Tor.start_tor()
-            _TorRotation.Tor_Reconnect[0] = _TorRotation.Tor_Reconnect[1] - 1
-        else:
-            _TorRotation.Tor_Reconnect[0] -= num_req
-
-def __append_tor_kwargs(kwargs):
-    if Tor.tor_status():
-        # Defaults to user specified proxies and headers over those defined by the tor interface
-        if 'proxies' not in kwargs.keys():
-            kwargs['proxies'] = Tor.tor_proxies
-        
-        if 'headers' not in kwargs.keys():
-            kwargs['headers'] = Tor.tor_headers
-        else:
-            for key, val in Tor.tor_headers.items():
-                if key not in kwargs['headers']:
-                    kwargs['headers'][key] = val
-
-def __responseify_html(html):
-    resp = _requests.models.Response()
-    resp.status_code = 200
-    resp.headers = {'header_key': 'NaN'}
-    resp._content = str(html).encode("utf-8")
-    resp.request = _requests.models.PreparedRequest()
-    return resp
+def __set_headers(kwargs):
+    headers = __DEFAULT_HEADERS.copy()
+    headers.update(kwargs.get('headers', {}))
+    return headers
