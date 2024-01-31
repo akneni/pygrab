@@ -13,14 +13,14 @@ PyGrab is a simple and performant Python library for making HTTP requests writte
 
 - **Simple**: PyGrab's API is designed to be straightforward and easy to use. If you're familiar with `requests`, you'll feel right at home.
 - **Flexible**: Whether you need to make a simple GET request, post data to a server, or download a file, PyGrab has you covered.
-- **Performant**: With its Rust-powered backend, PyGrab offers enhanced performance for CPU-bound tasks, providing faster data decompression, thread handling, and network handling..
+- **Performant**: With its Rust-powered backend, PyGrab offers enhanced performance for CPU-bound tasks, providing faster data decompression, thread handling, and network handling.
 - **Asynchronous Support**: PyGrab includes functions for making asynchronous HTTP requests, allowing you to efficiently grab data from multiple URLs at once.
 - **JavaScript Support**: PyGrab can render JavaScript-enabled websites, allowing you to grab data from dynamic web pages.
 - **Interface with Tor Network**: PyGrab includes built-in support for routing requests through the tor network.
 - **Automated IP Rotation**: PyGrab includes built-in support for rotating connections to the Tor Network.
 
 
-## Limitationa
+## Limitations
 - PyGrab is only supported on windows an linux currently. 
 
 ## Installation
