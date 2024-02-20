@@ -38,7 +38,7 @@ class Tor():
                     raise Exception("Invalid filepath")
                 else:
                     cls.load_tor_dependencies(dependency_filepath)
-                    print("Sucessfully loaded tor dependencies\nStarting tor service...")
+                    print("Successfully loaded tor dependencies\nStarting tor service...")
         elif cls.__os == 'Linux':
             # Check if tor dependencies are installed for linux
             if not cls.__tor_installed_linux():
@@ -59,7 +59,7 @@ class Tor():
                 text=True
             )
 
-        # Set the tor service to me termnated on program exit
+        # Set the tor service to me terminated on program exit
         _atexit.register(cls.end_tor)
         _signal.signal(_signal.SIGTERM, cls.__signal_handler)
 
@@ -117,7 +117,7 @@ class Tor():
         raise AttributeError("load_tor_dependencies only supports file types of '.tar.gz' and 'tor.exe'")
 
     @classmethod
-    def increment_roation_counter(cls, num_req: int = 1) -> None:
+    def increment_rotation_counter(cls, num_req: int = 1) -> None:
         if cls.__num_req['max_req'] is None: return
         cls.__num_req['curr_req'] += num_req
         if cls.__num_req['curr_req'] >= cls.__num_req['max_req']:

@@ -61,7 +61,7 @@ def get(url:str, enable_js:bool=False, timeout:int=None, override_default_header
         raise ValueError ("Url must start with http. use `get_local()` for local requests.")
 
     # Handles rotating tor connections
-    Tor.increment_roation_counter()
+    Tor.increment_rotation_counter()
     
     # Handle Js enables requests
     if enable_js:
@@ -104,8 +104,8 @@ def get_async(
     """
     try:
         urls = list(urls)
-    except Exception:
-        raise TypeError("Argument 'urls' must be an iterable object")
+    except Exception as e:
+        raise TypeError(f"Argument 'urls' must be an iterable object: {e}")
     if not (isinstance(enable_js, bool)):
         raise TypeError("Argument 'enable_js' must be a bool")
     if not (isinstance(thread_limit, (int)) or thread_limit is None):
@@ -125,28 +125,28 @@ def get_async(
     # Handle async js enabled scraping
     if enable_js:
         # Don't increment the number of requests, but rotate connections if it's necessary
-        Tor.increment_roation_counter(0) 
+        Tor.increment_rotation_counter(0) 
         result = {url:None for url in urls}
         for thread_counter in range (0, len(urls), thread_limit):
             curr_urls = urls[thread_counter:thread_counter+thread_limit]
             if enable_js:
                 htmls:dict = _js_scraper.pyppeteer_get_async(curr_urls, timeout=timeout)
                 result.update( {k:HttpResponse([i for i in v.encode('utf-8')], 200, {}) for k,v in htmls.items()} )
-        Tor.increment_roation_counter(len(urls))
+        Tor.increment_rotation_counter(len(urls))
         return result
 
     headers = __set_headers(kwargs) if not override_default_headers else kwargs.get('headers', {})
     proxy = __set_proxy(kwargs)
     client = SessionRs(timeout, headers, proxy)
     result = client.get_async(urls, thread_limit, _Warning.warning_settings)
-    Tor.increment_roation_counter(len(urls))
+    Tor.increment_rotation_counter(len(urls))
     return result
 
 def get_local(filename:str, local_read_type:str='r', encoding:str='utf-8') -> str:
     """
-    Reads the contens of a file and returns it to the user.
+    Reads the contents of a file and returns it to the user.
 
-    This function reads the contens of a file and returns it to the user.
+    This function reads the contents of a file and returns it to the user.
 
     Parameters:
         filename (str): The file to read from.
@@ -198,7 +198,7 @@ def download(url:str, local_filename:str, timeout:float=5) -> None:
     client.download(url, local_filename)
 
 
-def download_async(urls:(list, dict), local_filenames:list=None, thread_limit:int=50, timeout:float=12.0, time_rest:float=0) -> None:
+def download_async(urls:list, local_filenames:list=None, thread_limit:int=50, timeout:float=12.0, time_rest:float=0) -> None:
     """
     Executes multiple file downloads asynchronously from a list of given URLs and saves them locally.
 
@@ -222,8 +222,8 @@ def download_async(urls:(list, dict), local_filenames:list=None, thread_limit:in
         if len(urls) != len(local_filenames):
             raise ValueError("Lists 'url' and 'local_filenames' must be of equal length.")
     try:
-        # Removes repeats to avoid accedental DoS
-        # Maintains paralellism between lists
+        # Removes repeats to avoid accidental DoS
+        # Maintains parallelism between lists
         if not isinstance(urls, dict):
             urls = {url:filename for url, filename in zip(urls, local_filenames)}
         urls, local_filenames = zip(*urls.items())
@@ -234,27 +234,27 @@ def download_async(urls:(list, dict), local_filenames:list=None, thread_limit:in
     if not (isinstance(time_rest, (int, float))):
         raise TypeError("Argument 'time_rest' must be a int or float")
 
-    # Uses rust dependencies to asynchrounously download files
+    # Uses rust dependencies to asynchronously download files
     client = SessionRs(timeout, __set_headers({}), __set_proxy({}))
     client.download_async(urls, local_filenames, thread_limit, _Warning.warning_settings)
 
     # If tor rotations isn't None, then make this entire batch of requests with one connection
     # and then the connection to be changed on the next request
-    Tor.increment_roation_counter(len(urls))
+    Tor.increment_rotation_counter(len(urls))
     
 
 def head(url:str, timeout:float=5, **kwargs) -> HttpResponse:
-    Tor.increment_roation_counter()
+    Tor.increment_rotation_counter()
     headers = __set_headers(kwargs)
     proxy = __set_proxy(kwargs)
     client = SessionRs(timeout, headers, proxy)
     return client.head(url)
 
-def post(url:str, data:(str, bytes)=None, json:dict=None, timeout:float=5, **kwargs) -> HttpResponse:
+def post(url:str, data:str=None, json:dict=None, timeout:float=5, **kwargs) -> HttpResponse:
     local_file_starts = ['./', 'C:', '/'] 
     if any([url.startswith(i) for i in local_file_starts]):
         raise ValueError("use post_local() for creation of local files.")
-    Tor.increment_roation_counter()
+    Tor.increment_rotation_counter()
     headers = __set_headers(kwargs)
     proxy = __set_proxy(kwargs)
     client = SessionRs(timeout, headers, proxy)
@@ -270,11 +270,11 @@ def post(url:str, data:(str, bytes)=None, json:dict=None, timeout:float=5, **kwa
         return client.post_bytes(url, [i for i in data])
 
 def post_async(urls:list[str], data:list[(str, dict, bytes)], timeout:float=5, **kwargs):
-    # Remove repeats to avoid accedental DoS
-    # Maintain paralellism between lists
+    # Remove repeats to avoid accidental DoS
+    # Maintain parallelism between lists
     urls, data = zip(*{u:d for u, d in zip(urls, data)})
 
-    Tor.increment_roation_counter(len(urls))
+    Tor.increment_rotation_counter(len(urls))
     headers = __set_headers(kwargs)
     proxy = __set_proxy(kwargs)
     client = SessionRs(timeout, headers, proxy)
@@ -304,7 +304,7 @@ def post_local(filepath:str, data:str, local_save_type:str="w", encoding:str='ut
         f.write(str(data))
 
 def put(url, data:str=None, timeout:float=5, **kwargs):
-    Tor.increment_roation_counter()
+    Tor.increment_rotation_counter()
     headers = __set_headers(kwargs)
     proxy = __set_proxy(kwargs)
     client = SessionRs(timeout, headers, proxy)
@@ -312,17 +312,17 @@ def put(url, data:str=None, timeout:float=5, **kwargs):
 
 def patch(url, data=None, **kwargs):
     raise NotImplementedError("Not yet implemented in rust backend")
-    Tor.increment_roation_counter()
+    Tor.increment_rotation_counter()
 
 def delete(url, timeout:float=5, **kwargs):
-    Tor.increment_roation_counter()
+    Tor.increment_rotation_counter()
     headers = __set_headers(kwargs)
     proxy = __set_proxy(kwargs)
     client = SessionRs(timeout, headers, proxy)
     return client.delete(url)
 
 def options(url, timeout:float=5, **kwargs):
-    Tor.increment_roation_counter()
+    Tor.increment_rotation_counter()
     headers = __set_headers(kwargs)
     proxy = __set_proxy(kwargs)
     client = SessionRs(timeout, headers, proxy)
@@ -344,7 +344,7 @@ def warn_settings(warn: bool) -> True:
         raise TypeError("Argument 'warn' must be a bool")
     _Warning.warning_settings = warn
 
-def __set_proxy(kwargs) -> (str, None):
+def __set_proxy(kwargs) -> str:
     # Defaults to user specified proxies and headers over those defined by the tor interface
     if 'proxies' in kwargs.keys():
         try: return kwargs['proxies']['http']

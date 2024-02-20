@@ -135,7 +135,7 @@ class Session(_requests.Session):
         
         if local_filename is not None:
             if '.' not in local_filename:
-                raise ValueError("Argument 'local_filename' must have file extention.")
+                raise ValueError("Argument 'local_filename' must have file extension.")
         elif '/' in url:
             local_filename = url.split('/')[-1]
         else:
@@ -169,7 +169,7 @@ class Session(_requests.Session):
         else:
             local_filenames = [None for _ in range(len(urls))]
 
-        # Uses the threading module to asynchrounously download the files
+        # Uses the threading module to asynchronously download the files
         thread_counter = 0
         while (thread_counter < len(urls)):
             threads = []
