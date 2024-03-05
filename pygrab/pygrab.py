@@ -124,15 +124,17 @@ def get_async(
     if timeout is None:
         timeout = int( (25 if enable_js else 8) * (1.75 if Tor.tor_status() else 1) )
 
-    # remove repeats to prevent possible DoS attacks
-    urls = list(dict.fromkeys(urls))
-
     # Handle query params
     if params is not None:
         if isinstance(params, dict):
             urls = [__append_query_params(url, params) for url in urls]
         else:
+            if len(urls) != len(params):
+                raise ValueError("Arguments `urls` and `params` must be of the same length.")
             urls = [__append_query_params(url, param) for url, param in zip(urls, params)]
+
+    # remove repeats to prevent accidental DoS attacks
+    urls = list(dict.fromkeys(urls))
 
     # Handle async js enabled scraping
     if enable_js:
