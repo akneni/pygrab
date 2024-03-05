@@ -28,7 +28,7 @@ __DEFAULT_HEADERS = {
     "Cache-Control": "max-age=0",
 }
 
-def get(url:str, enable_js:bool=False, timeout:int=None, override_default_headers=False, *args, **kwargs) -> HttpResponse: 
+def get(url:str, enable_js:bool=False, timeout:int=None, override_default_headers:bool=False, params:dict=None, *args, **kwargs) -> HttpResponse: 
     """
     Gets the content at the specified URL.
 
@@ -36,6 +36,7 @@ def get(url:str, enable_js:bool=False, timeout:int=None, override_default_header
         url (str): The URL to get.
         enable_js (bool, optional): Whether to use a headless browser to scrape a url.
         timeout (int, optional): The timeout in number of seconds
+        params (dict, optional): The query parameters to append to the URL
         *args: Variable length argument list passed to requests.get.
         **kwargs: Arbitrary keyword arguments passed to requests.get.
 
@@ -63,6 +64,9 @@ def get(url:str, enable_js:bool=False, timeout:int=None, override_default_header
     # Handles rotating tor connections
     Tor.increment_rotation_counter()
     
+    # Handle query params
+    url = __append_query_params(url, params)
+
     # Handle Js enables requests
     if enable_js:
         res = _js_scraper.pyppeteer_get(url, timeout=timeout)
@@ -77,6 +81,7 @@ def get_async(
     urls:list, 
     enable_js:bool=False, 
     timeout:int=None, 
+    params:list=None,
     thread_limit:int=None, 
     override_default_headers:bool=False, 
     **kwargs
@@ -121,6 +126,13 @@ def get_async(
 
     # remove repeats to prevent possible DoS attacks
     urls = list(dict.fromkeys(urls))
+
+    # Handle query params
+    if params is not None:
+        if isinstance(params, dict):
+            urls = [__append_query_params(url, params) for url in urls]
+        else:
+            urls = [__append_query_params(url, param) for url, param in zip(urls, params)]
 
     # Handle async js enabled scraping
     if enable_js:
@@ -243,20 +255,22 @@ def download_async(urls:list, local_filenames:list=None, thread_limit:int=50, ti
     Tor.increment_rotation_counter(len(urls))
     
 
-def head(url:str, timeout:float=5, **kwargs) -> HttpResponse:
+def head(url:str, params:dict=None, timeout:float=5, **kwargs) -> HttpResponse:
     Tor.increment_rotation_counter()
     headers = __set_headers(kwargs)
     proxy = __set_proxy(kwargs)
+    url = __append_query_params(url, params)
     client = SessionRs(timeout, headers, proxy)
     return client.head(url)
 
-def post(url:str, data:str=None, json:dict=None, timeout:float=5, **kwargs) -> HttpResponse:
+def post(url:str, data:str=None, json:dict=None, params:dict=None, timeout:float=5, **kwargs) -> HttpResponse:
     local_file_starts = ['./', 'C:', '/'] 
     if any([url.startswith(i) for i in local_file_starts]):
         raise ValueError("use post_local() for creation of local files.")
     Tor.increment_rotation_counter()
     headers = __set_headers(kwargs)
     proxy = __set_proxy(kwargs)
+    url = __append_query_params(url, params)
     client = SessionRs(timeout, headers, proxy)
     if isinstance(data, str):
         return client.post(url, data)
@@ -356,3 +370,20 @@ def __set_headers(kwargs):
     headers = __DEFAULT_HEADERS.copy()
     headers.update(kwargs.get('headers', {}))
     return headers
+
+def __append_query_params(url:str, params:dict=None) -> str:
+    """
+    A function to append query parameters to a URL.
+
+    Args:
+        url (str): The original URL.
+        params (dict, optional): The parameters to be appended to the URL. Defaults to None.
+
+    Returns:
+        str: The URL with the appended query parameters.
+    """
+    if params is None:
+        return url
+    params = '&'.join(f'{k}={v}' for k, v in params.items())
+    url += ('&' if '?' in url else '?') + params
+    return url

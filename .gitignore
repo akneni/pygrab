@@ -1,3 +1,4 @@
 /pygrab/tester.*
 /pygrab/test.*
 /pygrab/unit-tester.*
+.vscode
