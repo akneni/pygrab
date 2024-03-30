@@ -7,10 +7,11 @@ with open(os.path.join(this_directory, 'README.md'), encoding='utf-8') as f:
 
 setup(
     name='pygrab',
-    version='3.0.6',
+    version='3.1.0',
     description='A secure python library for fetching data with async, JS, and Tor support',
     long_description=long_description,
     long_description_content_type='text/markdown',
+    license='MIT',
     author='Anish Kanthamneni',
     author_email='akneni@gmail.com',
     packages=find_packages(),

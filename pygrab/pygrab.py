@@ -14,10 +14,11 @@ from .tor import Tor
 from .session import Session
 from .js_scraper import js_scraper as _js_scraper
 from .warning import Warning as _Warning
-from .rust_dependencies.rust_lib import SessionRs, HttpResponse
+from .rust_dependencies.rust_lib import ThreadSessionRs, HttpResponse
 
 # Libraries
 import re as _re
+import asyncio as _asyncio
 
 __DEFAULT_HEADERS = {
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/88.0.4324.150 Safari/537.36",
@@ -28,7 +29,14 @@ __DEFAULT_HEADERS = {
     "Cache-Control": "max-age=0",
 }
 
-def get(url:str, enable_js:bool=False, timeout:int=None, override_default_headers:bool=False, params:dict=None, *args, **kwargs) -> HttpResponse: 
+def get(
+    url:str, 
+    enable_js:bool=False, 
+    timeout:int=None, 
+    override_default_headers:bool=False, 
+    params:dict=None, 
+    **kwargs
+) -> HttpResponse: 
     """
     Gets the content at the specified URL.
 
@@ -74,10 +82,46 @@ def get(url:str, enable_js:bool=False, timeout:int=None, override_default_header
     else:
         proxy = __set_proxy(kwargs)
         headers = __set_headers(kwargs) if not override_default_headers else kwargs.get('headers', {})
-        client = SessionRs(timeout, headers, proxy)
+        client = ThreadSessionRs(timeout, headers, proxy)
         return client.get(url)
-    
-def get_async(
+
+async def get_async(
+    url:str, 
+    enable_js:bool=False, 
+    timeout:int=None, 
+    override_default_headers:bool=False, 
+    params:dict=None, 
+    **kwargs
+) -> HttpResponse: 
+    """
+    Asynchronously gets the content at the specified URL using a separate thread.
+
+    Parameters:
+        url (str): The URL to get.
+        enable_js (bool, optional): Whether to use a headless browser to scrape the URL.
+        timeout (int, optional): The timeout in number of seconds.
+        override_default_headers (bool, optional): Whether to override default headers with custom headers.
+        params (dict, optional): The query parameters to append to the URL.
+        **kwargs: Arbitrary keyword arguments passed to the synchronous `get` function.
+
+    Returns:
+        HttpResponse: The response from the server.
+
+    Raises:
+        TypeError: If any of the arguments are not of the desired data type.
+        ValueError: If the user is trying to read a local file.
+    """
+    return _asyncio.to_thread(
+        get, 
+        url=url, 
+        enable_js=enable_js, 
+        timeout=timeout, 
+        override_default_headers=override_default_headers, 
+        params=params, 
+        **kwargs
+    )
+
+def get_batch(
     urls:list, 
     enable_js:bool=False, 
     timeout:int=None, 
@@ -151,8 +195,8 @@ def get_async(
 
     headers = __set_headers(kwargs) if not override_default_headers else kwargs.get('headers', {})
     proxy = __set_proxy(kwargs)
-    client = SessionRs(timeout, headers, proxy)
-    result = client.get_async(urls, thread_limit, _Warning.warning_settings)
+    client = ThreadSessionRs(timeout, headers, proxy)
+    result = client.get_batch(urls, thread_limit, _Warning.warning_settings)
     Tor.increment_rotation_counter(len(urls))
     return result
 
@@ -208,11 +252,30 @@ def download(url:str, local_filename:str, timeout:float=5) -> None:
         raise TypeError("Argument 'local_filename' must be a str")
     
     # sends a request to get the file contents
-    client = SessionRs(timeout, __set_headers({}), __set_proxy({}))
+    client = ThreadSessionRs(timeout, __set_headers({}), __set_proxy({}))
     client.download(url, local_filename)
 
+async def download_async(url:str, local_filename:str, timeout:float=5) -> None:
+    """
+    Asynchronously downloads a file from a given URL and saves it locally using a separate thread.
 
-def download_async(urls:list, local_filenames:list=None, thread_limit:int=50, timeout:float=12.0, time_rest:float=0) -> None:
+    This function retrieves a file from a specified URL and saves it to a local directory. The file will be saved with the filename from the URL if no local filename is specified.
+
+    Parameters:
+        url (str): The URL of the file to be downloaded. Must include a file extension.
+        local_filename (str): The name to be used when saving the file locally. If none is provided, the function uses the filename from the URL. Must include a file extension if provided.
+        timeout: (float, optional): The number of seconds the request should timeout after.
+        
+    Returns:
+        None
+
+    Raises:
+        TypeError: If any of the arguments are not of the desired data type.
+        ValueError: If 'local_filename' is specified but does not contain a file extension.
+    """
+    return _asyncio.to_thread(download, url=url, local_filename=local_filename, timeout=timeout)
+
+def download_batch(urls:list, local_filenames:list=None, thread_limit:int=50, timeout:float=12.0, time_rest:float=0) -> None:
     """
     Executes multiple file downloads asynchronously from a list of given URLs and saves them locally.
 
@@ -249,8 +312,8 @@ def download_async(urls:list, local_filenames:list=None, thread_limit:int=50, ti
         raise TypeError("Argument 'time_rest' must be a int or float")
 
     # Uses rust dependencies to asynchronously download files
-    client = SessionRs(timeout, __set_headers({}), __set_proxy({}))
-    client.download_async(urls, local_filenames, thread_limit, _Warning.warning_settings)
+    client = ThreadSessionRs(timeout, __set_headers({}), __set_proxy({}))
+    client.download_batch(urls, local_filenames, thread_limit, _Warning.warning_settings)
 
     # If tor rotations isn't None, then make this entire batch of requests with one connection
     # and then the connection to be changed on the next request
@@ -262,10 +325,28 @@ def head(url:str, params:dict=None, timeout:float=5, **kwargs) -> HttpResponse:
     headers = __set_headers(kwargs)
     proxy = __set_proxy(kwargs)
     url = __append_query_params(url, params)
-    client = SessionRs(timeout, headers, proxy)
+    client = ThreadSessionRs(timeout, headers, proxy)
     return client.head(url)
 
-def post(url:str, data:str=None, json:dict=None, params:dict=None, timeout:float=5, **kwargs) -> HttpResponse:
+def post(url:str, data=None, json:dict=None, params:dict=None, timeout:float=5, **kwargs) -> HttpResponse:
+    """
+    Sends a POST request to the specified URL.
+
+    Parameters:
+        url (str): The URL to send the POST request to.
+        data (str, dict, bytes, optional): The data to be sent in the body of the request. Can be a string, dictionary, or bytes.
+        json (dict, optional): A JSON object to be sent in the body of the request.
+        params (dict, optional): The query parameters to append to the URL.
+        timeout (float, optional): The timeout in number of seconds.
+        **kwargs: Arbitrary keyword arguments passed to requests.post.
+
+    Returns:
+        HttpResponse: The response from the server.
+
+    Raises:
+        ValueError: If the URL is trying to create a local file.
+        TypeError: If the data type of 'data', 'json', or 'params' is not supported.
+    """
     local_file_starts = ['./', 'C:', '/'] 
     if any([url.startswith(i) for i in local_file_starts]):
         raise ValueError("use post_local() for creation of local files.")
@@ -273,19 +354,41 @@ def post(url:str, data:str=None, json:dict=None, params:dict=None, timeout:float
     headers = __set_headers(kwargs)
     proxy = __set_proxy(kwargs)
     url = __append_query_params(url, params)
-    client = SessionRs(timeout, headers, proxy)
-    if isinstance(data, str):
+    client = ThreadSessionRs(timeout, headers, proxy)
+    if data is not None and isinstance(data, str):
+        data = data.encode('utf-8')
         return client.post(url, data)
-    if isinstance(json, dict):
+    if json is not None and isinstance(json, dict):
         json = {str(k): str(v) for k, v in json.items()}
         return client.post_json(url, json)
-    if isinstance(data, dict):
+    if data is not None and isinstance(data, dict):
         data = {str(k): str(v) for k, v in data.items()}
         return client.post_json(url, data)
-    if isinstance(data, bytes):
-        return client.post_bytes(url, [i for i in data])
+    if data is not None and isinstance(data, bytes):
+        return client.post(url, [i for i in data])
 
-def post_async(urls:list[str], data:list[(str, dict, bytes)], timeout:float=5, **kwargs):
+async def post_async(url:str, data=None, json:dict=None, params:dict=None, timeout:float=5, **kwargs) -> HttpResponse:
+    """
+    Asynchronously sends a POST request to the specified URL using a separate thread.
+
+    Parameters:
+        url (str): The URL to send the POST request to.
+        data (str, dict, bytes, optional): The data to be sent in the body of the request. Can be a string, dictionary, or bytes.
+        json (dict, optional): A JSON object to be sent in the body of the request.
+        params (dict, optional): The query parameters to append to the URL.
+        timeout (float, optional): The timeout in number of seconds.
+        **kwargs: Arbitrary keyword arguments passed to requests.post.
+
+    Returns:
+        HttpResponse: The response from the server.
+
+    Raises:
+        ValueError: If the URL is trying to create a local file.
+        TypeError: If the data type of 'data', 'json', or 'params' is not supported.
+    """
+    return _asyncio.to_thread(post, url=url, data=data, json=json, params=params, timeout=timeout, **kwargs)
+
+def post_batch(urls:list[str], data:list, timeout:float=5, **kwargs):
     # Remove repeats to avoid accidental DoS
     # Maintain parallelism between lists
     urls, data = zip(*{u:d for u, d in zip(urls, data)})
@@ -293,13 +396,14 @@ def post_async(urls:list[str], data:list[(str, dict, bytes)], timeout:float=5, *
     Tor.increment_rotation_counter(len(urls))
     headers = __set_headers(kwargs)
     proxy = __set_proxy(kwargs)
-    client = SessionRs(timeout, headers, proxy)
+    client = ThreadSessionRs(timeout, headers, proxy)
     if isinstance(data[0], str):
-        return client.post_async(urls, data)
-    if isinstance(data[0], dict):
-        return client.post_json_async(urls, data)
+        data = [i.encode('utf-8') for i in data]
+        return client.post_batch(urls, data)
     if isinstance(data[0], bytes):
-        return client.post_bytes(urls, [[j for j in bytes_data] for bytes_data in data])
+        return client.post_batch(urls, data)
+    if isinstance(data[0], dict):
+        return client.post_json_batch(urls, data)
 
 def post_local(filepath:str, data:str, local_save_type:str="w", encoding:str='utf-8') -> None:
     """
@@ -323,7 +427,7 @@ def put(url, data:str=None, timeout:float=5, **kwargs):
     Tor.increment_rotation_counter()
     headers = __set_headers(kwargs)
     proxy = __set_proxy(kwargs)
-    client = SessionRs(timeout, headers, proxy)
+    client = ThreadSessionRs(timeout, headers, proxy)
     return client.put(url, data)
 
 def patch(url, data=None, **kwargs):
@@ -334,14 +438,14 @@ def delete(url, timeout:float=5, **kwargs):
     Tor.increment_rotation_counter()
     headers = __set_headers(kwargs)
     proxy = __set_proxy(kwargs)
-    client = SessionRs(timeout, headers, proxy)
+    client = ThreadSessionRs(timeout, headers, proxy)
     return client.delete(url)
 
 def options(url, timeout:float=5, **kwargs):
     Tor.increment_rotation_counter()
     headers = __set_headers(kwargs)
     proxy = __set_proxy(kwargs)
-    client = SessionRs(timeout, headers, proxy)
+    client = ThreadSessionRs(timeout, headers, proxy)
     return client.options(url)
 
 def display_public_status() -> None:

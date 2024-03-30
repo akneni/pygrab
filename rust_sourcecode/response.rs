@@ -131,13 +131,26 @@ impl HttpResponse {
 
 // Rust only methods
 impl HttpResponse {
-    pub fn from_reqwest(res: reqwest::blocking::Response) -> Self {
+    pub fn from_reqwest_blocking(res: reqwest::blocking::Response) -> Self {
         let status_code = res.status().as_u16();
         let headers = res.headers().iter();
         let headers: HashMap<String, String> = headers.map(|(k, v)| {
             (k.to_string().to_ascii_lowercase(), v.to_str().unwrap_or_default().to_string())
         }).collect();
         let body = match res.bytes() {
+            Ok(x) => { x.to_vec() }
+            Err(_) => { Vec::new() }
+        };
+        Self::new(body, status_code, headers)
+    }
+
+    pub async fn from_reqwest(res: reqwest::Response) -> Self {
+        let status_code = res.status().as_u16();
+        let headers = res.headers().iter();
+        let headers: HashMap<String, String> = headers.map(|(k, v)| {
+            (k.to_string().to_ascii_lowercase(), v.to_str().unwrap_or_default().to_string())
+        }).collect();
+        let body = match res.bytes().await {
             Ok(x) => { x.to_vec() }
             Err(_) => { Vec::new() }
         };
