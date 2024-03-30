@@ -52,7 +52,7 @@ import pygrab
 pygrab.Tor.start_tor()
 
 urls = ['http://example.com', 'http://example.org', 'http://example.net']
-responses = pygrab.get_async(urls)
+responses = pygrab.get_batch(urls)
 
 for response in responses.values():
     print(response.text)
@@ -60,6 +60,12 @@ for response in responses.values():
 
 In this example, `responses` is a dictionary of urls matched to their respective `pygrab.HttpResponse` objects. Each response corresponds to the URL at the same index in the `urls` list.
 
+We can also use pygrab with python's `async/await` syntax.
+```python
+async def grab_data():
+    res = await pygrab.get_async('https://www.google.com')
+    return res
+```
 
 ## Contributing
 
