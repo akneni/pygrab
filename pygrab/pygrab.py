@@ -111,7 +111,7 @@ async def get_async(
         TypeError: If any of the arguments are not of the desired data type.
         ValueError: If the user is trying to read a local file.
     """
-    return _asyncio.to_thread(
+    return await _asyncio.to_thread(
         get, 
         url=url, 
         enable_js=enable_js, 
@@ -273,7 +273,7 @@ async def download_async(url:str, local_filename:str, timeout:float=5) -> None:
         TypeError: If any of the arguments are not of the desired data type.
         ValueError: If 'local_filename' is specified but does not contain a file extension.
     """
-    return _asyncio.to_thread(download, url=url, local_filename=local_filename, timeout=timeout)
+    return await _asyncio.to_thread(download, url=url, local_filename=local_filename, timeout=timeout)
 
 def download_batch(urls:list, local_filenames:list=None, thread_limit:int=50, timeout:float=12.0, time_rest:float=0) -> None:
     """
@@ -386,7 +386,7 @@ async def post_async(url:str, data=None, json:dict=None, params:dict=None, timeo
         ValueError: If the URL is trying to create a local file.
         TypeError: If the data type of 'data', 'json', or 'params' is not supported.
     """
-    return _asyncio.to_thread(post, url=url, data=data, json=json, params=params, timeout=timeout, **kwargs)
+    return await _asyncio.to_thread(post, url=url, data=data, json=json, params=params, timeout=timeout, **kwargs)
 
 def post_batch(urls:list[str], data:list, timeout:float=5, **kwargs):
     # Remove repeats to avoid accidental DoS
