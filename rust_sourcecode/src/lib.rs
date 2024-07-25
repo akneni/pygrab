@@ -9,7 +9,7 @@ use pyo3::prelude::*;
 
 /// A Python module implemented in Rust.
 #[pymodule]
-fn rust_lib(m: &Bound<'_, PyModule>) -> PyResult<()> {
+fn pygrab_ll(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<AsyncSessionRs>()?;
     m.add_class::<ThreadSessionRs>()?;
     m.add_class::<HttpResponse>()?;

@@ -717,6 +717,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "pygrab_ll"
+version = "0.1.0"
+dependencies = [
+ "brotli",
+ "flate2",
+ "pyo3",
+ "reqwest",
+ "serde",
+ "serde_json",
+ "tokio",
+]
+
+[[package]]
 name = "pyo3"
 version = "0.22.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -855,19 +868,6 @@ dependencies = [
  "spin",
  "untrusted",
  "windows-sys 0.52.0",
-]
-
-[[package]]
-name = "rust_lib"
-version = "0.1.0"
-dependencies = [
- "brotli",
- "flate2",
- "pyo3",
- "reqwest",
- "serde",
- "serde_json",
- "tokio",
 ]
 
 [[package]]

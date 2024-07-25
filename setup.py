@@ -7,7 +7,7 @@ with open(os.path.join(this_directory, 'README.md'), encoding='utf-8') as f:
 
 setup(
     name='pygrab',
-    version='3.1.2',
+    version='3.1.3',
     description='A secure python library for fetching data with async, JS, and Tor support',
     long_description=long_description,
     long_description_content_type='text/markdown',
@@ -21,8 +21,6 @@ setup(
         'pyppeteer',
         'nest_asyncio',
         'PySocks',
+        "pygrab_ll",
     ],
-    package_data={
-        'pygrab': ['rust_dependencies/*'],
-    },
 )
