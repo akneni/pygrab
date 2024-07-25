@@ -1,4 +1,6 @@
-/pygrab/tester.*
-/pygrab/test.*
-/pygrab/unit-tester.*
 .vscode
+pygrab/tester.*
+pygrab/test.*
+pygrab/unit-tester.*
+
+rust_sourcecode/target

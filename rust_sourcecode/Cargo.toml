@@ -9,10 +9,10 @@ name = "rust_lib"
 crate-type = ["cdylib"]
 
 [dependencies]
-brotli = "3.5.0"
+brotli = "6.0.0"
 flate2 = "1.0.28"
-pyo3 = "0.20.0"
-reqwest = { version = "0.12.2", features = ["blocking", "json", "socks"] }
+pyo3 = { version = "0.22.2", features = ["extension-module"] }
+reqwest = { version = "0.12.5", features = ["blocking", "json", "socks"] }
 serde = { version = "1.0.197", features = ["derive"] }
-serde_json = "1.0.115"
-tokio = "1.37.0"
+serde_json = "1.0.120"
+tokio = { version = "1.39.1", features = ["full"] }
