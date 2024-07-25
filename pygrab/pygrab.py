@@ -14,7 +14,7 @@ from .tor import Tor
 from .session import Session
 from .js_scraper import js_scraper as _js_scraper
 from .warning import Warning as _Warning
-from .rust_dependencies.rust_lib import ThreadSessionRs, HttpResponse
+from pygrab_ll import ThreadSessionRs, HttpResponse
 
 # Libraries
 import re as _re
