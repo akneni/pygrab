@@ -1,6 +1,4 @@
 .vscode
-pygrab/tester.*
-pygrab/test.*
-pygrab/unit-tester.*
+**/*.ipynb
 
 rust_sourcecode/target
