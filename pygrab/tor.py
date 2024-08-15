@@ -22,7 +22,14 @@ class Tor():
     }
 
     @classmethod
-    def start_tor(cls, verbose:int=0, force_start=False) -> None:
+    def start_tor(cls, verbose:int=0, force_start=None) -> None:
+        if force_start is None and cls.__os == 'Windows':
+            force_start = False
+        elif force_start is None and cls.__os == 'Linux':
+            force_start = True
+        else:
+            raise NotImplemented(f'Tor functionality not yet implemented for {cls.__os}')
+    
         if cls.__tor_service_enabled:
             cls.end_tor()
 
