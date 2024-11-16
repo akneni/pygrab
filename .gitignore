@@ -1,4 +1,4 @@
 .vscode
 **/*.ipynb
 **/__pycache__
-rust_sourcecode/target
+rust_sourcecode/target/

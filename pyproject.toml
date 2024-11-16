@@ -1,0 +1,20 @@
+[tool.poetry]
+name = "pygrab"
+version = "3.1.6"
+description = "High level, performant HTTP library with out-of-the-box support for concurrency and Tor"
+authors = ["Anish Kanthamneni <akneni@gmail.com>"]
+license = "MIT"
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = "^3.8"
+pygrab-ll = "^0.1.0"
+pysocks = "^1.7.1"
+nest-asyncio = "^1.6.0"
+pyppeteer = "^2.0.0"
+requests = "^2.32.3"
+
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"

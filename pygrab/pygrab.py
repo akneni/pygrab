@@ -19,6 +19,7 @@ from pygrab_ll import ThreadSessionRs, HttpResponse
 # Libraries
 import re as _re
 import asyncio as _asyncio
+import typing as _typing
 
 __DEFAULT_HEADERS = {
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/88.0.4324.150 Safari/537.36",
@@ -388,15 +389,15 @@ async def post_async(url:str, data=None, json:dict=None, params:dict=None, timeo
     """
     return await _asyncio.to_thread(post, url=url, data=data, json=json, params=params, timeout=timeout, **kwargs)
 
-def post_batch(urls:list[str], data:list, timeout:float=5, **kwargs):
-    # Remove repeats to avoid accidental DoS
-    # Maintain parallelism between lists
-    urls, data = zip(*{u:d for u, d in zip(urls, data)})
-
+def post_batch(urls:list[str] | str, data:list[_typing.Any], timeout:float=5, **kwargs):
     Tor.increment_rotation_counter(len(urls))
     headers = __set_headers(kwargs)
     proxy = __set_proxy(kwargs)
     client = ThreadSessionRs(timeout, headers, proxy)
+
+    if isinstance(urls, str):
+        urls = [urls for _ in range(len(data))]
+
     if isinstance(data[0], str):
         data = [i.encode('utf-8') for i in data]
         return client.post_batch(urls, data)
